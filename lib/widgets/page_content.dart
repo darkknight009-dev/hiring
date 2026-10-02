@@ -9,7 +9,8 @@ class PageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= AppSpacing.desktopBreakpoint;
+    final wide =
+        MediaQuery.sizeOf(context).width >= AppSpacing.desktopBreakpoint;
     return SingleChildScrollView(
       padding: EdgeInsets.all(wide ? AppSpacing.page : 20),
       child: Center(

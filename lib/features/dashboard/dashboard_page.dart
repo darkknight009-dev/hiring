@@ -22,7 +22,9 @@ class DashboardPage extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Less “I’ll come back to this.” More following through.',
-            style: theme.textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 32),
           _WelcomeCard(onAnalyze: onAnalyze),
@@ -30,7 +32,8 @@ class DashboardPage extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final columns = constraints.maxWidth >= 650 ? 4 : 2;
-              final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
+              final width =
+                  (constraints.maxWidth - (columns - 1) * 12) / columns;
               return Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -48,11 +51,25 @@ class DashboardPage extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(metric.$1, size: 19, color: colors.onSurfaceVariant),
+                            Icon(
+                              metric.$1,
+                              size: 19,
+                              color: colors.onSurfaceVariant,
+                            ),
                             const SizedBox(height: 14),
-                            Text('0', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w600)),
+                            Text(
+                              '0',
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             const SizedBox(height: 4),
-                            Text(metric.$2, style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+                            Text(
+                              metric.$2,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -64,7 +81,12 @@ class DashboardPage extends StatelessWidget {
           const SizedBox(height: 32),
           Text('Recent Opportunities', style: theme.textTheme.titleLarge),
           const SizedBox(height: 6),
-          Text('A home for the posts worth coming back to.', style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+          Text(
+            'A home for the posts worth coming back to.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 16),
           SurfaceCard(
             child: SizedBox(
@@ -74,18 +96,31 @@ class DashboardPage extends StatelessWidget {
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: colors.primary.withValues(alpha: 0.07), shape: BoxShape.circle),
-                    child: Icon(Icons.inbox_outlined, color: colors.primary, size: 28),
+                    decoration: BoxDecoration(
+                      color: colors.primary.withValues(alpha: 0.07),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.inbox_outlined,
+                      color: colors.primary,
+                      size: 28,
+                    ),
                   ),
                   const SizedBox(height: 18),
-                  Text('A fresh start. A clear radar.', style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
+                  Text(
+                    'A fresh start. A clear radar.',
+                    style: theme.textTheme.titleMedium,
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 8),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 420),
                     child: Text(
                       'No opportunities yet. Start by capturing a LinkedIn post you’d like to follow up on.',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -135,7 +170,12 @@ class _WelcomeCard extends StatelessWidget {
             children: [
               Icon(Icons.radar_rounded, color: colors.primary, size: 25),
               const SizedBox(width: 12),
-              Expanded(child: Text('Never miss a hiring post.', style: theme.textTheme.headlineSmall)),
+              Expanded(
+                child: Text(
+                  'Never miss a hiring post.',
+                  style: theme.textTheme.headlineSmall,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -143,17 +183,27 @@ class _WelcomeCard extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 640),
             child: Text(
               'Turn a post in your feed into your next opportunity. Capture the details, prepare your outreach, and make your move—on your terms.',
-              style: theme.textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
             ),
           ),
           const SizedBox(height: 24),
           FilledButton.icon(
             onPressed: onAnalyze,
             icon: const Icon(Icons.add_rounded, size: 20),
-            label: const Text('Analyze LinkedIn Post', textAlign: TextAlign.center),
+            label: const Text(
+              'Analyze LinkedIn Post',
+              textAlign: TextAlign.center,
+            ),
           ),
           const SizedBox(height: 14),
-          Text('Manual capture. No feed scraping. You’re always in control.', style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+          Text(
+            'Manual capture. No feed scraping. You’re always in control.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );

@@ -27,9 +27,7 @@ abstract final class AppTheme {
       onSurfaceVariant: dark
           ? const Color(0xFFAAB7AE)
           : const Color(0xFF647168),
-      outlineVariant: dark
-          ? const Color(0xFF333D36)
-          : const Color(0xFFE3E8E3),
+      outlineVariant: dark ? const Color(0xFF333D36) : const Color(0xFFE3E8E3),
     );
     final base = ThemeData(useMaterial3: true, colorScheme: scheme);
     return base.copyWith(
@@ -92,7 +90,9 @@ abstract final class AppTheme {
         indicatorColor: scheme.primaryContainer,
         elevation: 0,
       ),
-      tooltipTheme: const TooltipThemeData(waitDuration: Duration(milliseconds: 400)),
+      tooltipTheme: const TooltipThemeData(
+        waitDuration: Duration(milliseconds: 400),
+      ),
     );
   }
 }

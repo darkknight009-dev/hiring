@@ -28,7 +28,8 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final desktop = MediaQuery.sizeOf(context).width >= AppSpacing.desktopBreakpoint;
+    final desktop =
+        MediaQuery.sizeOf(context).width >= AppSpacing.desktopBreakpoint;
     final themeButton = IconButton(
       tooltip: theme.brightness == Brightness.dark
           ? 'Switch to light mode'
@@ -45,7 +46,10 @@ class _AppShellState extends State<AppShell> {
     final content = Column(
       children: [
         Container(
-          padding: EdgeInsets.symmetric(horizontal: desktop ? AppSpacing.page : 20, vertical: 12),
+          padding: EdgeInsets.symmetric(
+            horizontal: desktop ? AppSpacing.page : 20,
+            vertical: 12,
+          ),
           decoration: BoxDecoration(
             color: colors.surface,
             border: Border(bottom: BorderSide(color: colors.outlineVariant)),
@@ -59,11 +63,18 @@ class _AppShellState extends State<AppShell> {
               Expanded(
                 child: Text(
                   desktop ? _destination.label : 'Hiring Radar',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               if (desktop)
-                Text('Your next move starts here.', style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+                Text(
+                  'Your next move starts here.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
               const SizedBox(width: 16),
               themeButton,
             ],
@@ -91,7 +102,9 @@ class _AppShellState extends State<AppShell> {
                 width: 240,
                 decoration: BoxDecoration(
                   color: colors.surface,
-                  border: Border(right: BorderSide(color: colors.outlineVariant)),
+                  border: Border(
+                    right: BorderSide(color: colors.outlineVariant),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,7 +115,12 @@ class _AppShellState extends State<AppShell> {
                         children: [
                           const RadarLogo(),
                           const SizedBox(width: 10),
-                          Expanded(child: Text('Hiring Radar', style: theme.textTheme.titleLarge)),
+                          Expanded(
+                            child: Text(
+                              'Hiring Radar',
+                              style: theme.textTheme.titleLarge,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -113,14 +131,24 @@ class _AppShellState extends State<AppShell> {
                     for (final destination in AppDestination.values)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-                        child: ListTile(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          selected: _destination == destination,
-                          selectedColor: colors.primary,
-                          selectedTileColor: colors.primary.withValues(alpha: 0.08),
-                          leading: Icon(destination.icon, size: 21),
-                          title: Text(destination.label, style: theme.textTheme.labelLarge),
-                          onTap: () => _navigate(destination),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            selected: _destination == destination,
+                            selectedColor: colors.primary,
+                            selectedTileColor: colors.primary.withValues(
+                              alpha: 0.08,
+                            ),
+                            leading: Icon(destination.icon, size: 21),
+                            title: Text(
+                              destination.label,
+                              style: theme.textTheme.labelLarge,
+                            ),
+                            onTap: () => _navigate(destination),
+                          ),
                         ),
                       ),
                     const Spacer(),
@@ -134,7 +162,13 @@ class _AppShellState extends State<AppShell> {
                     const Divider(),
                     Padding(
                       padding: const EdgeInsets.all(24),
-                      child: Text('WEB PREVIEW  /  0.1', style: theme.textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant, letterSpacing: 1)),
+                      child: Text(
+                        'WEB PREVIEW  /  0.1',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          letterSpacing: 1,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -147,10 +181,14 @@ class _AppShellState extends State<AppShell> {
           ? null
           : NavigationBar(
               selectedIndex: _destination.index,
-              onDestinationSelected: (index) => _navigate(AppDestination.values[index]),
+              onDestinationSelected: (index) =>
+                  _navigate(AppDestination.values[index]),
               destinations: [
                 for (final destination in AppDestination.values)
-                  NavigationDestination(icon: Icon(destination.icon), label: destination.label),
+                  NavigationDestination(
+                    icon: Icon(destination.icon),
+                    label: destination.label,
+                  ),
               ],
             ),
     );

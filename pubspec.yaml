@@ -1,5 +1,5 @@
 name: hiring
-description: "A new Flutter project."
+description: "Hiring Radar — a personal hiring opportunity inbox. PWA first, manual action always."
 publish_to: 'none'
 version: 0.1.0+1
 

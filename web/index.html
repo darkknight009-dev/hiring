@@ -1,46 +1,42 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
-
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
-
-  <!-- iOS meta tags & icons -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Never miss a hiring post. Your personal opportunity inbox, with you in control of every application and message.">
+  <meta name="theme-color" content="#24734f">
+  <meta name="color-scheme" content="light dark">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="hiring">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Hiring Radar">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>hiring</title>
+  <link rel="icon" type="image/png" href="favicon.png">
   <link rel="manifest" href="manifest.json">
+  <title>Hiring Radar</title>
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #f7f8f5; color: #202c25; }
+    #boot { min-height: 100vh; display: grid; place-content: center; text-align: center; padding: 0 24px; font-family: system-ui, sans-serif; }
+    #boot img { margin: 0 auto 20px; border-radius: 14px; }
+    #boot h1 { font-size: 24px; letter-spacing: -0.6px; margin: 0 0 12px; }
+    #boot p { max-width: 420px; color: #647168; line-height: 1.6; }
+    #boot a { color: #24734f; padding: 12px; }
+    [hidden] { display: none !important; }
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #121613; color: #e8ece9; }
+      #boot p { color: #aab7ae; }
+      #boot a { color: #8ed6ae; }
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <div id="boot" role="status" aria-live="polite">
+    <img src="icons/Icon-192.png" width="56" height="56" alt="">
+    <h1>Hiring Radar</h1>
+    <p id="boot-status">Loading your workspace…</p>
+    <a id="boot-retry" href="" hidden>Reload Hiring Radar</a>
+  </div>
+  <noscript>Hiring Radar needs JavaScript enabled to run.</noscript>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

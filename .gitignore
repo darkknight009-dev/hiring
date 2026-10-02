@@ -46,3 +46,32 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local secrets (never put server keys in Flutter dart-defines)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+**/key.properties
+
+# Future backend / private user data
+.venv/
+__pycache__/
+.pytest_cache/
+*.sqlite
+*.sqlite3
+*.db
+/uploads/
+/resumes/
+/private/
+/backend/uploads/
+/backend/resumes/
+/backend/private/
+
+# Local agent state
+__agent__/
+.omnirush/

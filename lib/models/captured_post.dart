@@ -12,7 +12,9 @@ class CapturedPost {
     final normalizedText = text.trim();
     final normalizedUrl = url.trim();
     if (normalizedText.isEmpty && normalizedUrl.isEmpty) {
-      throw const FormatException('Paste a LinkedIn post URL or some post text to continue.');
+      throw const FormatException(
+        'Paste a LinkedIn post URL or some post text to continue.',
+      );
     }
     final urlError = validateUrl(normalizedUrl);
     final textError = validateText(normalizedText);
@@ -46,8 +48,8 @@ class CapturedPost {
       return 'Use a valid HTTPS LinkedIn post URL (https://www.linkedin.com/…).';
     }
     if (!(uri.path.startsWith('/posts/') ||
-        uri.path.startsWith('/feed/update/') ||
-        uri.path.startsWith('/pulse/')) ||
+            uri.path.startsWith('/feed/update/') ||
+            uri.path.startsWith('/pulse/')) ||
         uri.pathSegments.last.isEmpty) {
       return 'Use a LinkedIn post link, not a profile or homepage.';
     }
