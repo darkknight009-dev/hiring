@@ -67,8 +67,24 @@ void main() {
         'https://linkedin.com/feed/update/urn:li:activity:123',
         'https://in.linkedin.com/posts/example?utm_source=share',
         'https://www.linkedin.com/pulse/example-article',
+        'https://lnkd.in/abc123',
+        'https://www.lnkd.in/dQw4w9Gc',
       ]) {
         expect(CapturedPost.fromInput(url: url).url.toString(), url);
+      }
+    });
+
+    test('still rejects look-alike lnkd.in hosts', () {
+      for (final url in [
+        'https://lnkd.in.evil.example/abc123',
+        'https://evil-lnkd.in/abc123',
+        'http://lnkd.in/abc123',
+      ]) {
+        expect(
+          () => CapturedPost.fromInput(url: url),
+          throwsFormatException,
+          reason: url,
+        );
       }
     });
   });

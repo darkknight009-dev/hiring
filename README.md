@@ -160,7 +160,7 @@ flutter analyze
 flutter test
 ```
 
-48 tests cover: capture validation boundaries and hostile URLs; the offline filter on the four spec examples; analysis parsing with unknowns-as-null; DM/email scenario detection; connection-state transitions and draft serialization (including legacy records); repository round-trip and status updates; settings persistence including profile/resume/reminders and job-preference gating; the NVIDIA provider contract (payload, rejected key, fenced JSON); the full onboarding flow including preference persistence; the dashboard radar status card (ON state, capture count, enable CTA); responsive layouts at 320/390/768/1440 px; 200% text scaling; theme toggling; save/count flows; AI-missing honesty; and recoverable capture failures.
+50 tests cover: capture validation boundaries and hostile URLs (including lnkd.in short-link acceptance and look-alike host rejection); the offline filter on the four spec examples; analysis parsing with unknowns-as-null; DM/email scenario detection; connection-state transitions and draft serialization (including legacy records); repository round-trip and status updates; settings persistence including profile/resume/reminders and job-preference gating; the NVIDIA provider contract (payload, rejected key, fenced JSON); the full onboarding flow including preference persistence; the dashboard radar status card (ON state, capture count, enable CTA); mid-session share delivery into the capture form; responsive layouts at 320/390/768/1440 px; 200% text scaling; theme toggling; save/count flows; AI-missing honesty; and recoverable capture failures.
 
 The accessibility service, notifications, and alarms are exercised on-device only; keep that in mind when testing on a real phone.
 

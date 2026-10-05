@@ -41,21 +41,48 @@ class _AnalyzePageState extends State<AnalyzePage> {
   @override
   void initState() {
     super.initState();
-    final pending = widget.deps.takePendingCapture();
-    if (pending != null) {
-      _text.text = pending.text ?? '';
-      _url.text = pending.url?.toString() ?? '';
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _capture();
-      });
+    _consumePending();
+    widget.deps.addListener(_onDepsChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant AnalyzePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.deps != widget.deps) {
+      oldWidget.deps.removeListener(_onDepsChanged);
+      widget.deps.addListener(_onDepsChanged);
     }
   }
 
   @override
   void dispose() {
+    widget.deps.removeListener(_onDepsChanged);
     _url.dispose();
     _text.dispose();
     super.dispose();
+  }
+
+  void _onDepsChanged() {
+    if (!mounted || !widget.deps.hasPendingCapture) return;
+    setState(_consumePending);
+  }
+
+  /// Pulls a shared-in post (share sheet, PROCESS_TEXT, launch share) into
+  /// the form. This page stays mounted inside the shell's indexed stack, so a
+  /// share arriving while the app is open never re-runs initState — the deps
+  /// listener routes it here instead.
+  void _consumePending() {
+    final pending = widget.deps.takePendingCapture();
+    if (pending == null) return;
+    _text.text = pending.text ?? '';
+    _url.text = pending.url?.toString() ?? '';
+    if (_stage != _Stage.idle) {
+      // Never interleave analyses; the user can re-run from the filled form.
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _capture();
+    });
   }
 
   void _invalidate(String _) {

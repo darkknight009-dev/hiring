@@ -360,6 +360,30 @@ void main() {
     expect(find.byKey(const Key('radar-enable-button')), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'share arriving while the app is open lands in the capture form',
+    (tester) async {
+      setViewport(tester, const Size(390, 844));
+      final deps = await makeDeps();
+      await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
+      await tester.pumpAndSettle();
+
+      // Simulate the platform share sheet delivering a post mid-session; the
+      // capture page is already mounted, so this must reach it via listeners.
+      await deps.setPendingCapture(
+        CapturedPost.fromInput(text: 'We are hiring a Flutter dev at Acme!'),
+      );
+      await tester.pumpAndSettle();
+
+      // The shell switched to the capture tab and the form carries the text.
+      expect(find.text('Analyze LinkedIn Opportunity'), findsOneWidget);
+      final field = tester.widget<TextFormField>(
+        find.byKey(const Key('post-text')),
+      );
+      expect(field.controller!.text, 'We are hiring a Flutter dev at Acme!');
+    },
+  );
 }
 
 class _PendingCapture implements CaptureProvider {

@@ -39,14 +39,23 @@ class CapturedPost {
     if (input.isEmpty) return null;
     if (input.length > maxUrlLength) return 'This URL is too long.';
     final uri = Uri.tryParse(input);
+    final host = uri?.host ?? '';
+    final isLinkedInHost =
+        host == 'linkedin.com' ||
+        host.endsWith('.linkedin.com') ||
+        host == 'lnkd.in' ||
+        host.endsWith('.lnkd.in');
     if (uri == null ||
         uri.scheme != 'https' ||
-        !(uri.host == 'linkedin.com' || uri.host.endsWith('.linkedin.com')) ||
+        !isLinkedInHost ||
         uri.userInfo.isNotEmpty ||
         uri.hasPort ||
         RegExp(r'\s').hasMatch(input)) {
       return 'Use a valid HTTPS LinkedIn post URL (https://www.linkedin.com/…).';
     }
+    // Share-friendly short links (lnkd.in/<code>) carry an opaque path, not a
+    // /posts/ segment. Accept them as-is; post-path rules do not apply.
+    if (host == 'lnkd.in' || host.endsWith('.lnkd.in')) return null;
     if (!(uri.path.startsWith('/posts/') ||
             uri.path.startsWith('/feed/update/') ||
             uri.path.startsWith('/pulse/')) ||
