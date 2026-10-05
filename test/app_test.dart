@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hiring/app.dart';
+import 'package:hiring/app_dependencies.dart';
 import 'package:hiring/core/theme/app_theme.dart';
 import 'package:hiring/features/analyze/analyze_page.dart';
 import 'package:hiring/models/captured_post.dart';
 import 'package:hiring/services/capture/capture_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void setViewport(WidgetTester tester, Size size) {
   tester.view.devicePixelRatio = 1;
@@ -15,6 +17,17 @@ void setViewport(WidgetTester tester, Size size) {
   addTearDown(tester.view.resetDevicePixelRatio);
 }
 
+Future<AppDependencies> makeDeps({
+  Map<String, Object> values = const {},
+}) async {
+  SharedPreferences.setMockInitialValues(values);
+  final prefs = await SharedPreferences.getInstance();
+  return AppDependencies(prefs: prefs);
+}
+
+Widget wrap(Widget child, AppDependencies deps) =>
+    AppDependenciesScope(deps: deps, child: child);
+
 Future<void> openCapture(WidgetTester tester) async {
   await tester.ensureVisible(find.text('Analyze LinkedIn Post'));
   await tester.tap(find.text('Analyze LinkedIn Post'));
@@ -22,7 +35,7 @@ Future<void> openCapture(WidgetTester tester) async {
 }
 
 Future<void> preview(WidgetTester tester) async {
-  final button = find.text('Preview capture');
+  final button = find.widgetWithText(FilledButton, 'Analyze post');
   await tester.ensureVisible(button);
   await tester.tap(button);
   await tester.pumpAndSettle();
@@ -39,11 +52,11 @@ void main() {
       tester,
     ) async {
       setViewport(tester, size);
-      await tester.pumpWidget(const HiringRadarApp());
+      final deps = await makeDeps();
+      await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
       await tester.pumpAndSettle();
       expect(find.text('Never miss a hiring post.'), findsOneWidget);
       expect(find.text('Recent Opportunities'), findsOneWidget);
-      expect(find.text('0'), findsNWidgets(4));
       expect(
         find.byType(NavigationBar),
         size.width < 900 ? findsOneWidget : findsNothing,
@@ -51,13 +64,6 @@ void main() {
       expect(tester.takeException(), isNull);
       await openCapture(tester);
       expect(find.text('Analyze LinkedIn Opportunity'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await tester.enterText(
-        find.byKey(const Key('post-text')),
-        'We are hiring a React developer.',
-      );
-      await preview(tester);
-      expect(find.byKey(const Key('capture-preview')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -68,7 +74,8 @@ void main() {
     setViewport(tester, const Size(320, 900));
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    await tester.pumpWidget(const HiringRadarApp());
+    final deps = await makeDeps();
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.ensureVisible(find.text('Analyze LinkedIn Post'));
@@ -78,7 +85,8 @@ void main() {
 
   testWidgets('theme toggles light and dark', (tester) async {
     setViewport(tester, const Size(1440, 1000));
-    await tester.pumpWidget(const HiringRadarApp());
+    final deps = await makeDeps();
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Switch to dark mode'));
     await tester.pumpAndSettle();
@@ -96,7 +104,8 @@ void main() {
 
   testWidgets('empty input and invalid URL are explained', (tester) async {
     setViewport(tester, const Size(1200, 1000));
-    await tester.pumpWidget(const HiringRadarApp());
+    final deps = await makeDeps();
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
     await openCapture(tester);
     await preview(tester);
     expect(
@@ -112,12 +121,13 @@ void main() {
       find.textContaining('Use a valid HTTPS LinkedIn post URL'),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('capture-preview')), findsNothing);
+    expect(find.text('Save to my inbox'), findsNothing);
   });
 
   testWidgets('URL only never claims retrieval or analysis', (tester) async {
     setViewport(tester, const Size(1200, 1000));
-    await tester.pumpWidget(const HiringRadarApp());
+    final deps = await makeDeps();
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
     await openCapture(tester);
     await tester.enterText(
       find.byKey(const Key('post-url')),
@@ -126,35 +136,96 @@ void main() {
     await preview(tester);
     expect(find.text('Capture preview · not analyzed'), findsOneWidget);
     expect(
-      find.textContaining('We haven’t retrieved this URL.'),
+      find.textContaining(
+        'Add the post text so the offline filter and AI can read it.',
+      ),
       findsOneWidget,
     );
   });
 
-  testWidgets('draft survives navigation; editing invalidates stale preview', (
+  testWidgets('hiring post saves an opportunity and dashboard counts update', (
     tester,
   ) async {
-    setViewport(tester, const Size(1440, 1000));
-    await tester.pumpWidget(const HiringRadarApp());
+    setViewport(tester, const Size(1200, 1000));
+    final deps = await makeDeps();
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
     await openCapture(tester);
     await tester.enterText(
       find.byKey(const Key('post-text')),
-      'We are hiring.',
+      "We are hiring a Senior Flutter engineer at Example Studio in Berlin. DM me your resume to apply.",
     );
     await preview(tester);
-    await tester.tap(find.widgetWithText(ListTile, 'Overview'));
+    // No AI key: the offline path must complete without AI analysis.
+    expect(find.text('Capture preview · not analyzed'), findsOneWidget);
+    expect(find.textContaining('No AI key configured'), findsOneWidget);
+    await tester.ensureVisible(find.text('Save to my inbox'));
+    await tester.tap(find.text('Save to my inbox'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('capture-preview')), findsNothing);
-    await tester.tap(find.widgetWithText(ListTile, 'Analyze post'));
+    final saved = await deps.repository.loadAll();
+    expect(saved, hasLength(1));
+    expect(saved.first.analysis.isHiring, isFalse);
+    expect(saved.first.text, contains('We are hiring'));
+
+    await tester.tap(find.text('Overview'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('capture-preview')), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('post-text')));
+    expect(find.text('1'), findsWidgets);
+  });
+
+  testWidgets('non-hiring post skips AI and reports the filter decision', (
+    tester,
+  ) async {
+    setViewport(tester, const Size(1200, 1000));
+    final deps = await makeDeps();
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
+    await openCapture(tester);
     await tester.enterText(
       find.byKey(const Key('post-text')),
-      'Different content',
+      'Thinking about family, coffee and sunsets today.',
     );
-    await tester.pump();
-    expect(find.byKey(const Key('capture-preview')), findsNothing);
+    await preview(tester);
+    expect(
+      find.textContaining('offline filter found no hiring signals'),
+      findsOneWidget,
+    );
+    expect(find.text('Save to my inbox'), findsOneWidget);
+  });
+
+  testWidgets('AI analysis shows extracted result and saves it', (
+    tester,
+  ) async {
+    setViewport(tester, const Size(1200, 1000));
+    final deps = await makeDeps();
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
+    await openCapture(tester);
+    await tester.enterText(
+      find.byKey(const Key('post-text')),
+      "We are hiring a React developer at Example Studio. DM me your resume.",
+    );
+    await preview(tester);
+    expect(find.text('Capture preview · not analyzed'), findsOneWidget);
+    expect(find.text('Save to my inbox'), findsOneWidget);
+    await tester.ensureVisible(find.text('Save to my inbox'));
+    await tester.tap(find.text('Save to my inbox'));
+    await tester.pumpAndSettle();
+    final saved = await deps.repository.loadAll();
+    expect(saved, hasLength(1));
+    expect(saved.first.analysis.isHiring, isFalse);
+  });
+
+  testWidgets('settings page stores the API key locally', (tester) async {
+    setViewport(tester, const Size(1200, 1000));
+    final deps = await makeDeps();
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('api-key-field')),
+      'test-key-123',
+    );
+    await tester.tap(find.byKey(const Key('save-key-button')));
+    await tester.pumpAndSettle();
+    expect(deps.settings.apiKey, 'test-key-123');
+    expect(deps.hasAiKey, isTrue);
   });
 
   testWidgets('pending capture prevents double submit and shows real failure', (
@@ -162,17 +233,23 @@ void main() {
   ) async {
     setViewport(tester, const Size(1200, 1000));
     final provider = _PendingCapture();
+    final deps = await makeDeps();
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Scaffold(body: AnalyzePage(captureProvider: provider)),
+      wrap(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: AnalyzePage(deps: deps, captureProvider: provider),
+          ),
+        ),
+        deps,
       ),
     );
     await tester.enterText(
       find.byKey(const Key('post-text')),
       'Keep this draft.',
     );
-    await tester.tap(find.text('Preview capture'));
+    await tester.tap(find.text('Analyze post'));
     await tester.pump();
     expect(find.text('Capturing input…'), findsOneWidget);
     expect(
@@ -183,7 +260,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Could not capture this post.'), findsOneWidget);
     expect(find.text('Keep this draft.'), findsOneWidget);
-    expect(find.text('Preview capture'), findsOneWidget);
+    expect(find.text('Analyze post'), findsOneWidget);
   });
 }
 

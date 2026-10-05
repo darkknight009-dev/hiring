@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../app_dependencies.dart';
 import '../core/routing/app_destination.dart';
 import '../core/theme/app_theme.dart';
 import '../features/analyze/analyze_page.dart';
 import '../features/dashboard/dashboard_page.dart';
+import '../features/opportunities/opportunities_page.dart';
+import '../features/settings/settings_page.dart';
 import 'radar_logo.dart';
 import 'surface_card.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.onToggleTheme});
+  const AppShell({super.key, required this.onToggleTheme, required this.deps});
 
   final VoidCallback onToggleTheme;
+  final AppDependencies deps;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -18,6 +22,35 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   AppDestination _destination = AppDestination.dashboard;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.deps.addListener(_onDepsChanged);
+  }
+
+  @override
+  void didUpdateWidget(AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.deps != widget.deps) {
+      oldWidget.deps.removeListener(_onDepsChanged);
+      widget.deps.addListener(_onDepsChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.deps.removeListener(_onDepsChanged);
+    super.dispose();
+  }
+
+  void _onDepsChanged() {
+    if (!mounted) return;
+    if (widget.deps.hasPendingCapture &&
+        _destination != AppDestination.analyze) {
+      setState(() => _destination = AppDestination.analyze);
+    }
+  }
 
   void _navigate(AppDestination destination) {
     FocusManager.instance.primaryFocus?.unfocus();
@@ -42,6 +75,17 @@ class _AppShellState extends State<AppShell> {
         size: 20,
       ),
     );
+
+    final pages = [
+      DashboardPage(
+        deps: widget.deps,
+        onAnalyze: () => _navigate(AppDestination.analyze),
+        onOpenOpportunities: () => _navigate(AppDestination.opportunities),
+      ),
+      OpportunitiesPage(deps: widget.deps),
+      AnalyzePage(deps: widget.deps),
+      SettingsPage(deps: widget.deps),
+    ];
 
     final content = Column(
       children: [
@@ -81,13 +125,7 @@ class _AppShellState extends State<AppShell> {
           ),
         ),
         Expanded(
-          child: IndexedStack(
-            index: _destination.index,
-            children: [
-              DashboardPage(onAnalyze: () => _navigate(AppDestination.analyze)),
-              const AnalyzePage(),
-            ],
-          ),
+          child: IndexedStack(index: _destination.index, children: pages),
         ),
       ],
     );
@@ -163,7 +201,7 @@ class _AppShellState extends State<AppShell> {
                     Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        'WEB PREVIEW  /  0.1',
+                        'WEB PREVIEW  /  0.2',
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: colors.onSurfaceVariant,
                           letterSpacing: 1,

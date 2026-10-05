@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'app_dependencies.dart';
 import 'core/theme/app_theme.dart';
 import 'widgets/app_shell.dart';
 
 class HiringRadarApp extends StatefulWidget {
-  const HiringRadarApp({super.key});
+  const HiringRadarApp({super.key, required this.deps});
+
+  final AppDependencies deps;
 
   @override
   State<HiringRadarApp> createState() => _HiringRadarAppState();
@@ -30,7 +33,7 @@ class _HiringRadarAppState extends State<HiringRadarApp> {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: _themeMode,
-      home: AppShell(onToggleTheme: _toggleTheme),
+      home: AppShell(onToggleTheme: _toggleTheme, deps: widget.deps),
     );
   }
 }

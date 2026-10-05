@@ -44,8 +44,19 @@ def write_icon(path: Path, size: int) -> None:
     print(path.relative_to(ROOT.parent))
 
 
+ANDROID_ROOT = Path(__file__).resolve().parents[1] / "android" / "app" / "src" / "main" / "res"
+MIPMAPS = {
+    "mipmap-mdpi": 48,
+    "mipmap-hdpi": 72,
+    "mipmap-xhdpi": 96,
+    "mipmap-xxhdpi": 144,
+    "mipmap-xxxhdpi": 192,
+}
+
 if __name__ == "__main__":
     for dimension in (192, 512):
         write_icon(ROOT / "icons" / f"Icon-{dimension}.png", dimension)
         write_icon(ROOT / "icons" / f"Icon-maskable-{dimension}.png", dimension)
     write_icon(ROOT / "favicon.png", 32)
+    for directory, size in MIPMAPS.items():
+        write_icon(ANDROID_ROOT / directory / "ic_launcher.png", size)
