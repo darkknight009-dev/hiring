@@ -1,24 +1,25 @@
-# Hiring Radar
+# FeedRadar
 
-**Never miss a hiring post.** A personal opportunity inbox with a background radar for Android: while you scroll LinkedIn, hiring posts are detected locally, analyzed with your own Gemini key, and turned into ready-made outreach material — a connection note, a personalized DM, or an email draft. **You send everything yourself. The app never clicks, types, or sends anything.**
+**Your feed has hiring posts. Your radar catches them.** A personal opportunity radar with a background scanner for Android: while you scroll LinkedIn, hiring posts matching *your* job preferences are detected locally, analyzed with your own AI key (Gemini or NVIDIA), and turned into ready-made outreach material — a connection note, a personalized DM, or an email draft. **You send everything yourself. The app never clicks, types, or sends anything.**
 
-> **Current milestone: background radar (0.3).** Android background capture (read-only accessibility), manual connection tracking with interval reminders, AI-drafted outreach, resume attachment via your own email app, and the local-only analyzed inbox from 0.2. No backend, no automation of any LinkedIn action.
+> **Current milestone: onboarding + preference-tuned radar (0.4).** First-launch onboarding (name, headline, job preferences) that syncs directly into the radar's capture filter, an animated radar loader and page transitions, NVIDIA NIM as a second AI provider, and everything from 0.3: Android background capture (read-only accessibility), connection tracking with interval reminders, AI-drafted outreach, resume attachment, and the local-only inbox. No backend, no automation of any LinkedIn action.
 
 > ⚠️ **Honest risk note:** observing another app's content via an Accessibility Service is automation-adjacent and outside LinkedIn's terms of service. The radar is strictly read-only, keeps all data on-device, and never interacts with LinkedIn — but using it is your decision and account restriction is a possible consequence. Enable it in Accessibility settings; disable it any time.
 
 ## What works now
 
-- Responsive overview with a desktop sidebar and compact mobile bottom navigation, light/dark themes.
+- **Onboarding (first launch):** a three-step flow — welcome, your name/headline, and job preferences (roles/keywords + optional locations). Preferences are saved to settings and pushed into the radar, so only matching posts are captured. Everything is editable later in Settings.
+- Responsive overview with a desktop sidebar and compact mobile bottom navigation, light/dark themes, **animated page transitions**, and an **animated radar loader** during AI work.
 - Manual capture (URL/text/share target) with validation, plus **background radar capture** on Android.
 - **Offline hiring filter**: cheap rule-based detection gates AI calls so obvious non-posts never cost quota.
-- **AI analysis** (Google Gemini, free tier): structured extraction of role, company, location, apply instructions, summary, and a hiring verdict with confidence — nullable fields, never invented values.
+- **AI analysis** (Google Gemini **or NVIDIA NIM**, free tiers): structured extraction of role, company, location, apply instructions, summary, and a hiring verdict with confidence — nullable fields, never invented values.
 - **Saved opportunities** with statuses (New, Need action, Applied, Follow-up, Archived), search, and filtering — all stored **locally on your device**.
 - **Ready-made outreach, sent by you:**
   - *DM posts* → the app asks whether you are connected. Not connected: it crafts a ≤200-char connection note, then (after you mark "I sent the request") repeats reminders until you mark "they accepted", which unlocks the personalized DM draft. Already connected: straight to the DM draft.
   - *Email posts* → it crafts a subject + body and can open your email app with everything pre-filled and your stored resume PDF attached.
   - Every draft is copyable and regenerable; the AI may only use facts from your profile card and the post itself.
-- **Background radar (Android):** a read-only Accessibility Service observes visible LinkedIn text while you scroll, gates it with the offline filter, analyzes, saves, and sends a local notification. No clicks, no typing, no sends, no data leaving the device.
-- Settings: provider, API key, model, filter threshold, reminder interval, profile card (name/headline/skills/tone), resume PDF.
+- **Background radar (Android):** a read-only Accessibility Service observes visible LinkedIn text while you scroll, gates it with the offline filter **and your job preferences**, analyzes, saves, and sends a local notification. No clicks, no typing, no sends, no data leaving the device.
+- Settings: provider (Gemini/NVIDIA/OpenRouter), API key, model override, filter threshold, reminder interval, job preferences (synced with the radar), profile card (name/headline/skills/tone), resume PDF.
 - Branded web manifest, maskable icons, favicon, and matching Android launcher icons.
 
 **Not yet implemented:** auto-sending (deliberately), company research, backend sync, authentication, and the full offline/install PWA milestone. AI runs directly from the device to the provider; there is no server in the middle.
@@ -29,7 +30,7 @@
 | --- | --- | --- |
 | Shared UI and app logic | Flutter / Dart | Implemented |
 | Persistence | `shared_preferences` (local-only JSON) | Implemented |
-| AI | `AiProvider` abstraction; Gemini implementation | Implemented; key user-supplied |
+| AI | `AiProvider` abstraction; Gemini + NVIDIA NIM implementations | Implemented; key user-supplied |
 | Hiring filter | Offline rule-based scoring | Implemented |
 | Background capture | Android Accessibility Service (read-only) | Implemented; sideload APK |
 | Outreach | Draft generation + copy/email handoff | Implemented; sends are manual |
@@ -57,8 +58,9 @@ lib/
   features/
     dashboard/dashboard_page.dart   # Live counts and recent opportunities
     analyze/analyze_page.dart       # Capture → filter → AI → save
+    onboarding/onboarding_page.dart # First launch: name + job preferences
     opportunities/opportunities_page.dart  # Inbox list, detail, statuses
-    settings/settings_page.dart     # Provider, API key, threshold, data controls
+    settings/settings_page.dart     # Provider, API key, preferences, data controls
   models/
     captured_post.dart              # Validated raw input
     opportunity.dart                # PostAnalysis (AI result)
@@ -69,6 +71,7 @@ lib/
       hiring_filter.dart            # Offline gating filter
       ai_provider.dart              # Contract + result/error types
       gemini_ai_provider.dart       # HTTPS call, JSON mode, mapped errors
+      nvidia_ai_provider.dart       # NVIDIA NIM (OpenAI-compatible) implementation
     capture/                        # Manual capture contract + web impl
     opportunities/opportunity_repository.dart  # Local JSON persistence
     outreach/outreach_service.dart  # Draft generation + reminders
@@ -77,7 +80,8 @@ lib/
     resume/resume_store.dart        # Private PDF storage
     settings/settings_store.dart    # Provider/key/model/threshold/profile/reminders
     share/                          # Share target: parser + web/IO impls
-  widgets/                          # Shell, layout, cards, notices, logo
+  widgets/                          # Shell (animated transitions), radar loader,
+                                    # keyword chip field, cards, notices, logo
 web/                                # Manifest (+ share_target), icons
 android/
   RadarAccessibilityService.kt      # Read-only LinkedIn feed scanner
@@ -115,16 +119,18 @@ Open `http://127.0.0.1:8080` in Brave. Press `q` in the Flutter terminal to stop
 
 ### Configure AI analysis
 
-1. Get a free API key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (no credit card).
-2. Open **Settings** in the app, choose **Google Gemini**, paste the key, and save it.
-3. Fill **Your profile** (name, headline, skills, tone) — drafts use only these facts.
-4. Optionally pick your **resume PDF** for email attachments.
+1. Get a free API key: **Google Gemini** at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) or **NVIDIA** at [build.nvidia.com](https://build.nvidia.com) (no credit card).
+2. Open **Settings** in the app, choose the provider, paste the key, and save it.
+3. Optionally override the model (NVIDIA default: `meta/llama-3.3-70b-instruct`).
+4. Fill **Your profile** (name, headline, skills, tone) — drafts use only these facts.
+5. Optionally pick your **resume PDF** for email attachments.
+6. Set **Job preferences** — the radar then captures only posts mentioning your roles (and locations, if set).
 
 The key is stored on your device only (browser localStorage / Android SharedPreferences) and is sent only to the provider with your analysis requests. Posts that the offline filter scores below the threshold skip AI entirely to save quota.
 
 ### Enable the background radar (Android)
 
-1. Open **Settings → Background radar → Accessibility settings** and enable **Hiring Radar** for the LinkedIn app.
+1. Open **Settings → Background radar → Accessibility settings** and enable **FeedRadar** for the LinkedIn app.
 2. Allow notifications so captures and follow-up reminders appear.
 3. Scroll your feed. Hiring posts land in **Opportunities** with a "by radar" badge.
 4. Open an opportunity and follow the outreach path: connection note → reminders → personalized message, or the email draft with resume attached.
@@ -154,7 +160,7 @@ flutter analyze
 flutter test
 ```
 
-39 tests cover: capture validation boundaries and hostile URLs; the offline filter on the four spec examples; analysis parsing with unknowns-as-null; DM/email scenario detection; connection-state transitions and draft serialization (including legacy records); repository round-trip and status updates; settings persistence including profile/resume/reminders; responsive layouts at 320/390/768/1440 px; 200% text scaling; theme toggling; save/count flows; AI-missing honesty; and recoverable capture failures.
+48 tests cover: capture validation boundaries and hostile URLs; the offline filter on the four spec examples; analysis parsing with unknowns-as-null; DM/email scenario detection; connection-state transitions and draft serialization (including legacy records); repository round-trip and status updates; settings persistence including profile/resume/reminders and job-preference gating; the NVIDIA provider contract (payload, rejected key, fenced JSON); the full onboarding flow including preference persistence; the dashboard radar status card (ON state, capture count, enable CTA); responsive layouts at 320/390/768/1440 px; 200% text scaling; theme toggling; save/count flows; AI-missing honesty; and recoverable capture failures.
 
 The accessibility service, notifications, and alarms are exercised on-device only; keep that in mind when testing on a real phone.
 
@@ -163,7 +169,7 @@ The accessibility service, notifications, and alarms are exercised on-device onl
 1. ✅ Environment, design system, responsive shell, validated manual capture.
 2. ✅ Domain models, local opportunity inbox with statuses, offline filter.
 3. ✅ Device-side AI extraction via user-supplied Gemini key; PWA share target; Android APK with share-sheet intake.
-4. Outreach drafts (editable, copyable — never auto-sent), profile, PDF resume.
+4. ✅ Onboarding with job preferences synced into the radar, NVIDIA provider, animated transitions and loader, FeedRadar rebrand.
 5. Permitted company/public-professional research with source evidence.
 6. FastAPI/PostgreSQL backend with auth and sync (opt-in; local-first remains).
 7. Complete PWA offline/install/update behavior.
@@ -174,7 +180,8 @@ The accessibility service, notifications, and alarms are exercised on-device onl
 - **The radar is not perfect:** it reads visible text heuristically, so it can miss posts, capture fragments, or guess the author's name. Treat captures as candidates and verify in the inbox. It only works while the LinkedIn app is on screen and the Flutter app process is alive.
 - **Everything is stored on one device;** clearing browser/app data deletes your inbox. Export/backup is not built yet.
 - AI output depends on the provider; the app shows failures honestly and never fabricates fields.
-- The offline filter is intentionally conservative; some hiring posts may skip AI (lower the threshold in Settings).
+- The offline filter is intentionally conservative; some hiring posts may skip AI (lower the threshold in Settings). Job preferences are strict by design: a post must mention your roles (and locations, if set) or it is skipped.
+- With job preferences set, the radar relies on keyword matching; posts phrased without any of your keywords are not captured.
 - LinkedIn limits connection notes to 200 characters; the app shows a live counter but the final paste is on you.
 - OpenRouter is selectable in Settings but not yet connected.
 - Shell navigation has no deep links/browser-history integration yet.

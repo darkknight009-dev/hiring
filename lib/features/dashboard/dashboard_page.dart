@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app_dependencies.dart';
 import '../../models/opportunity_entity.dart';
+import '../../services/platform/android_bridge.dart';
 import '../../widgets/page_content.dart';
 import '../../widgets/surface_card.dart';
 
@@ -42,6 +43,11 @@ class DashboardPage extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             _WelcomeCard(onAnalyze: onAnalyze),
+            const SizedBox(height: 16),
+            _RadarStatusCard(
+              deps: deps,
+              onOpenOpportunities: onOpenOpportunities,
+            ),
             const SizedBox(height: 32),
             _MetricCards(deps: deps),
             const SizedBox(height: 32),
@@ -88,7 +94,7 @@ class DashboardPage extends StatelessWidget {
                           ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 420),
                             child: Text(
-                              'No opportunities yet. Capture a LinkedIn post you’d like to follow up on.',
+                              'No opportunities yet. Turn on the radar below and scroll your feed, or capture a post manually.',
                               textAlign: TextAlign.center,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: colors.onSurfaceVariant,
@@ -296,6 +302,175 @@ class _WelcomeCard extends StatelessWidget {
             style: theme.textTheme.bodySmall?.copyWith(
               color: colors.onSurfaceVariant,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Live radar status on the home screen so the background radar is visible
+/// without digging through settings. Android only; web shows a hint.
+class _RadarStatusCard extends StatefulWidget {
+  const _RadarStatusCard({
+    required this.deps,
+    required this.onOpenOpportunities,
+  });
+
+  final AppDependencies deps;
+  final VoidCallback onOpenOpportunities;
+
+  @override
+  State<_RadarStatusCard> createState() => _RadarStatusCardState();
+}
+
+class _RadarStatusCardState extends State<_RadarStatusCard> {
+  Listenable? _listeningTo;
+  bool? _radarEnabled;
+  int _capturedCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _listen();
+    _refresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RadarStatusCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.deps != widget.deps) _listen(refresh: true);
+  }
+
+  void _listen({bool refresh = false}) {
+    _listeningTo?.removeListener(_onDepsChanged);
+    _listeningTo = widget.deps;
+    _listeningTo?.addListener(_onDepsChanged);
+    if (refresh) _refresh();
+  }
+
+  void _onDepsChanged() {
+    if (mounted) setState(() {});
+    _updateCount();
+  }
+
+  Future<void> _updateCount() async {
+    final all = await widget.deps.repository.loadAll();
+    final count = all.where((o) => o.capturedVia == 'radar').length;
+    if (!mounted) return;
+    setState(() => _capturedCount = count);
+  }
+
+  Future<void> _refresh() async {
+    final enabled = await AndroidBridge.isRadarEnabled();
+    if (!mounted) return;
+    setState(() => _radarEnabled = enabled);
+    await _updateCount();
+  }
+
+  @override
+  void dispose() {
+    _listeningTo?.removeListener(_onDepsChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final enabled = _radarEnabled;
+    return SurfaceCard(
+      key: const Key('radar-status-card'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.radar_rounded,
+                size: 22,
+                color: enabled == true
+                    ? colors.primary
+                    : colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Background radar',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              Container(
+                key: const Key('radar-status-chip'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: enabled == true
+                      ? colors.primary.withValues(alpha: 0.12)
+                      : colors.surfaceContainerHighest.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  switch (enabled) {
+                    true => 'ON',
+                    false => 'OFF',
+                    null => '···',
+                  },
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: enabled == true
+                        ? colors.primary
+                        : colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            switch (enabled) {
+              true => 'Listening to your feed. Hiring posts are captured locally while you scroll.',
+              false => 'Off. Enable it once in Accessibility settings and it watches your feed while you scroll.',
+              null => 'Checking radar status…',
+            },
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          if (_capturedCount > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              '$_capturedCount post${_capturedCount == 1 ? '' : 's'} captured so far.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (enabled != true)
+                FilledButton.tonalIcon(
+                  key: const Key('radar-enable-button'),
+                  onPressed: () async {
+                    await AndroidBridge.openAccessibilitySettings();
+                    if (mounted) _refresh();
+                  },
+                  icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+                  label: const Text('Turn on'),
+                ),
+              TextButton.icon(
+                onPressed: widget.onOpenOpportunities,
+                icon: const Icon(Icons.inbox_outlined, size: 18),
+                label: const Text('See captures'),
+              ),
+            ],
           ),
         ],
       ),

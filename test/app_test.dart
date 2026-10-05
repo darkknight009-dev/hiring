@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hiring/app.dart';
 import 'package:hiring/app_dependencies.dart';
@@ -301,6 +303,62 @@ void main() {
     expect(find.textContaining('Could not capture this post.'), findsOneWidget);
     expect(find.text('Keep this draft.'), findsOneWidget);
     expect(find.text('Analyze post'), findsOneWidget);
+  });
+
+  testWidgets('dashboard radar card shows status and radar capture count', (
+    tester,
+  ) async {
+    setViewport(tester, const Size(390, 1600));
+    final now = DateTime.now().toUtc().toIso8601String();
+    final deps = await makeDeps(
+      values: {
+        'opportunities.v1': jsonEncode([
+          {
+            'id': 'radar-1',
+            'createdAt': now,
+            'updatedAt': now,
+            'status': 'new',
+            'analysis': {
+              'isHiring': true,
+              'role': 'Flutter Engineer',
+              'company': 'Acme',
+            },
+            'text': 'We are hiring a Flutter Engineer at Acme!',
+            'capturedVia': 'radar',
+            'connectionState': 'none',
+            'drafts': {},
+          },
+        ]),
+      },
+    );
+    // The dashboard queries the native radar over the platform channel.
+    // Mock it so the status resolves (an unmocked channel future never
+    // completes in tests) and assert the ON state deterministically.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('app.hiringradar/share'),
+          (call) async {
+            if (call.method == 'isRadarEnabled') return true;
+            return null;
+          },
+        );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('app.hiringradar/share'),
+            null,
+          );
+    });
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('radar-status-card')), findsOneWidget);
+    expect(find.text('ON'), findsOneWidget);
+    expect(find.text('1 post captured so far.'), findsOneWidget);
+    expect(find.text('See captures'), findsOneWidget);
+    // Radar is on, so the enable CTA is hidden.
+    expect(find.byKey(const Key('radar-enable-button')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }
 
