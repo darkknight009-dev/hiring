@@ -92,6 +92,11 @@ class AndroidBridge {
   static Future<void> cancelReminder(String key) =>
       _call<void>('cancelReminder', {'key': key});
 
+  /// Pushes the user's job-preference keywords into the native radar so its
+  /// pre-filter admits posts the user actually cares about.
+  static Future<void> updateRadarKeywords(List<String> keywords) =>
+      _call<void>('updateRadarKeywords', {'keywords': keywords});
+
   static Future<void> openEmail({
     required String to,
     required String subject,

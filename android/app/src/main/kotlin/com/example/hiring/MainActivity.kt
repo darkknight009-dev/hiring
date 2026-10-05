@@ -53,7 +53,7 @@ class MainActivity : FlutterActivity() {
                 "showNotification" -> {
                     val args = call.arguments as? Map<*, *>
                     showCaptureNotification(
-                        (args?.get("title") as? String) ?: "Hiring Radar",
+                        (args?.get("title") as? String) ?: "FeedRadar",
                         (args?.get("body") as? String) ?: "",
                         (args?.get("id") as? Number)?.toInt() ?: 1001
                     )
@@ -63,7 +63,7 @@ class MainActivity : FlutterActivity() {
                     val args = call.arguments as? Map<*, *>
                     scheduleReminder(
                         key = (args?.get("key") as? String) ?: "reminder",
-                        title = (args?.get("title") as? String) ?: "Hiring Radar",
+                        title = (args?.get("title") as? String) ?: "FeedRadar",
                         body = (args?.get("body") as? String) ?: "",
                         intervalMillis = (args?.get("intervalMillis") as? Number)?.toLong()
                             ?: 12L * 60 * 60 * 1000
@@ -73,6 +73,14 @@ class MainActivity : FlutterActivity() {
                 "cancelReminder" -> {
                     val args = call.arguments as? Map<*, *>
                     cancelReminder((args?.get("key") as? String) ?: "reminder")
+                    result.success(null)
+                }
+                "updateRadarKeywords" -> {
+                    val args = call.arguments as? Map<*, *>
+                    val keywords = (args?.get("keywords") as? List<*>)
+                        ?.filterIsInstance<String>()
+                        .orEmpty()
+                    RadarAccessibilityService.userKeywords = keywords
                     result.success(null)
                 }
                 "openEmail" -> {

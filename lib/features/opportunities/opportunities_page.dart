@@ -8,6 +8,7 @@ import '../../services/analysis/ai_provider.dart';
 import '../../services/outreach/outreach_service.dart';
 import '../../services/platform/android_bridge.dart';
 import '../../widgets/page_content.dart';
+import '../../widgets/radar_loader.dart';
 import '../../widgets/surface_card.dart';
 
 /// The saved inbox. Every action is explicit and local; nothing leaves the
@@ -575,11 +576,7 @@ class _MiniSpinner extends StatelessWidget {
   const _MiniSpinner();
 
   @override
-  Widget build(BuildContext context) => const SizedBox(
-    width: 16,
-    height: 16,
-    child: CircularProgressIndicator(strokeWidth: 2),
-  );
+  Widget build(BuildContext context) => const RadarLoader(size: 18);
 }
 
 class _DraftCard extends StatelessWidget {

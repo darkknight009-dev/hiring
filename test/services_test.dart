@@ -1,10 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hiring/models/opportunity.dart';
 import 'package:hiring/models/opportunity_entity.dart';
 import 'package:hiring/models/outreach.dart';
+import 'package:hiring/services/analysis/ai_provider.dart';
 import 'package:hiring/services/analysis/hiring_filter.dart';
+import 'package:hiring/services/analysis/nvidia_ai_provider.dart';
 import 'package:hiring/services/opportunities/opportunity_repository.dart';
 import 'package:hiring/services/settings/settings_store.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -265,6 +271,164 @@ void main() {
       expect(settings.reminderHours, 12);
       await settings.setResumePath(null);
       expect(settings.resumePath, isNull);
+    });
+
+    test('onboarding flag round-trips', () async {
+      final settings = await store({});
+      expect(settings.onboarded, isFalse);
+      await settings.setOnboarded(true);
+      final reloaded = await store({'onboarding.done': true});
+      expect(reloaded.onboarded, isTrue);
+    });
+
+    test('nvidia provider round-trips', () async {
+      final settings = await store({});
+      await settings.setProvider(AiProviderKind.nvidia);
+      final reloaded = await store({'ai.provider': 'nvidia'});
+      expect(reloaded.provider, AiProviderKind.nvidia);
+    });
+
+    test('preferred roles and locations round-trip and are cleaned', () async {
+      final settings = await store({});
+      expect(settings.preferredRoles, isEmpty);
+      expect(settings.hasJobPreferences, isFalse);
+      await settings.setPreferredRoles(['  Flutter developer  ', '', 'Data']);
+      await settings.setPreferredLocations([' Remote ']);
+      expect(settings.preferredRoles, ['Flutter developer', 'Data']);
+      expect(settings.preferredLocations, ['Remote']);
+      expect(settings.hasJobPreferences, isTrue);
+    });
+
+    test('matchesJobPreferences gates radar captures', () async {
+      Future<SettingsStore> seeded(Map<String, Object> seed) => store(seed);
+
+      // No preferences: everything passes.
+      final open = await seeded({});
+      expect(open.matchesJobPreferences('Any hiring post at all'), isTrue);
+
+      // Roles only.
+      final roles = await seeded({
+        'prefs.roles': ['flutter developer'],
+      });
+      expect(
+        roles.matchesJobPreferences(
+          'We are hiring a Flutter Developer in Bengaluru. DM me!',
+        ),
+        isTrue,
+      );
+      expect(
+        roles.matchesJobPreferences('We are hiring a graphic designer.'),
+        isFalse,
+      );
+
+      // Locations only.
+      final locations = await seeded({
+        'prefs.locations': ['Remote'],
+      });
+      expect(
+        locations.matchesJobPreferences('Hiring a designer, fully remote.'),
+        isTrue,
+      );
+      expect(
+        locations.matchesJobPreferences('Hiring a designer in Pune.'),
+        isFalse,
+      );
+
+      // Both set: a post must mention at least one of each.
+      final both = await seeded({
+        'prefs.roles': ['flutter'],
+        'prefs.locations': ['remote'],
+      });
+      expect(
+        both.matchesJobPreferences('Hiring a Flutter engineer, remote ok.'),
+        isTrue,
+      );
+      expect(
+        both.matchesJobPreferences('Hiring a Flutter engineer in Pune.'),
+        isFalse,
+      );
+    });
+  });
+
+  group('NVIDIA provider', () {
+    test('analyzes a post via the OpenAI-compatible payload', () async {
+      final client = MockClient((request) async {
+        expect(request.url.host, 'integrate.api.nvidia.com');
+        expect(request.url.path, '/v1/chat/completions');
+        expect(request.headers['Authorization'], 'Bearer nvapi-test');
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['model'], 'meta/llama-3.3-70b-instruct');
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'role': 'assistant',
+                  'content': jsonEncode({
+                    'isHiring': true,
+                    'confidence': 90,
+                    'role': 'Flutter Developer',
+                    'company': 'Example Studio',
+                    'location': null,
+                    'applyInstructions': null,
+                    'summary': 'A Flutter role at Example Studio.',
+                  }),
+                },
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final provider = NvidiaAiProvider(apiKey: 'nvapi-test', client: client);
+      final result = await provider.analyzePost(
+        text: 'We are hiring a Flutter dev.',
+      );
+      expect(result.analysis.isHiring, isTrue);
+      expect(result.analysis.role, 'Flutter Developer');
+      expect(result.modelUsed, 'meta/llama-3.3-70b-instruct');
+    });
+
+    test('a rejected key surfaces a clear error', () async {
+      final client = MockClient(
+        (request) async => http.Response('{"detail": "unauthorized"}', 401),
+      );
+      final provider = NvidiaAiProvider(apiKey: 'bad', client: client);
+      await expectLater(
+        provider.analyzePost(text: 'We are hiring.'),
+        throwsA(isA<AiAnalysisException>()),
+      );
+    });
+
+    test('markdown-fenced JSON still parses into a draft', () async {
+      final client = MockClient(
+        (request) async => http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'content': 'Here is your draft:\n```json\n{"subject": "Flutter role", "body": "Hello!"}\n```',
+                },
+              },
+            ],
+          }),
+          200,
+        ),
+      );
+      final provider = NvidiaAiProvider(apiKey: 'k', client: client);
+      final draft = await provider.generateDraft(
+        kind: 'email',
+        postText: 'We are hiring.',
+        profile: const UserProfile(
+          name: 'Test',
+          headline: '',
+          skills: '',
+          tone: 'professional',
+        ),
+      );
+      expect(draft.subject, 'Flutter role');
+      expect(draft.body, 'Hello!');
     });
   });
 }

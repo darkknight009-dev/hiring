@@ -24,7 +24,7 @@ class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_SHOW_REMINDER) return
         val key = intent.getIntExtra(EXTRA_KEY, 0)
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: "Hiring Radar"
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: "FeedRadar"
         val body = intent.getStringExtra(EXTRA_BODY) ?: return
         showNotification(context, key, title, body)
     }

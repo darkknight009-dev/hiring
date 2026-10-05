@@ -5,10 +5,10 @@ import '../analysis/ai_provider.dart';
 import '../analysis/hiring_filter.dart';
 import '../platform/android_bridge.dart';
 
-/// Consumes posts the Android radar observed, applies the offline filter,
-/// analyzes with AI when a key is configured, saves the opportunity locally,
-/// and notifies. Runs only while the app process is alive; nothing is sent
-/// anywhere on the user's behalf.
+/// Consumes posts the Android radar observed, applies the offline filter and
+/// the user's job preferences, analyzes with AI when a key is configured,
+/// saves the opportunity locally, and notifies. Runs only while the app
+/// process is alive; nothing is sent anywhere on the user's behalf.
 class RadarCapture {
   RadarCapture(this._deps);
 
@@ -19,12 +19,24 @@ class RadarCapture {
   static const _maxRemembered = 60;
 
   void start() {
+    syncPreferences();
     AndroidBridge.radarPosts.listen((post) {
       // Serialize processing: one AI call at a time, drop overlaps.
       if (_busy) return;
       _busy = true;
       _handle(post).whenComplete(() => _busy = false);
     });
+  }
+
+  /// Pushes the user's job preferences into the native radar pre-filter so
+  /// its keyword gate admits posts the user actually cares about. Called at
+  /// startup and whenever preferences change in the UI.
+  void syncPreferences() {
+    final settings = _deps.settings;
+    AndroidBridge.updateRadarKeywords([
+      ...settings.preferredRoles,
+      ...settings.preferredLocations,
+    ]);
   }
 
   Future<void> _handle(RadarPost post) async {
@@ -35,10 +47,14 @@ class RadarCapture {
       _recentHashes.removeAt(0);
     }
 
-    // Cheap gate: the same offline filter used in manual capture.
-    if (!looksLikeHiringPost(
+    final settings = _deps.settings;
+    if (settings.hasJobPreferences) {
+      // The user's own preferences are the filter: only posts matching their
+      // roles (and locations, if set) are captured.
+      if (!settings.matchesJobPreferences(post.text)) return;
+    } else if (!looksLikeHiringPost(
       post.text,
-      threshold: _deps.settings.filterThreshold,
+      threshold: settings.filterThreshold,
     )) {
       return;
     }

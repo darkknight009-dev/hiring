@@ -20,7 +20,8 @@ void setViewport(WidgetTester tester, Size size) {
 Future<AppDependencies> makeDeps({
   Map<String, Object> values = const {},
 }) async {
-  SharedPreferences.setMockInitialValues(values);
+  // Existing tests exercise the main workspace, not first launch.
+  SharedPreferences.setMockInitialValues({'onboarding.done': true, ...values});
   final prefs = await SharedPreferences.getInstance();
   return AppDependencies(prefs: prefs);
 }
@@ -226,6 +227,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(deps.settings.apiKey, 'test-key-123');
     expect(deps.hasAiKey, isTrue);
+  });
+
+  testWidgets('first launch shows onboarding and preferences reach the radar', (
+    tester,
+  ) async {
+    setViewport(tester, const Size(1200, 1000));
+    final deps = await makeDeps(values: {'onboarding.done': false});
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
+    await tester.pumpAndSettle();
+
+    // Step 1: welcome.
+    expect(find.text('FeedRadar'), findsWidgets);
+    expect(find.text('Get started'), findsOneWidget);
+    await tester.tap(find.text('Get started'));
+    await tester.pumpAndSettle();
+
+    // Step 2: profile.
+    await tester.enterText(find.byType(TextFormField).first, 'Test User');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    // Step 3: preferences.
+    final rolesField = find.descendant(
+      of: find.byKey(const Key('keyword-field-Roles or keywords')),
+      matching: find.byType(TextFormField),
+    );
+    await tester.enterText(rolesField, 'Flutter developer,');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Tune my radar'));
+    await tester.pump(); // finishing state with the radar loader
+    expect(find.text('Tuning your radar…'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1100)); // finish delay
+    await tester.pump(const Duration(milliseconds: 600)); // switcher
+    expect(find.text('Tuning your radar…'), findsNothing);
+    expect(find.text('Never miss a hiring post.'), findsOneWidget);
+    expect(deps.settings.onboarded, isTrue);
+    expect(deps.settings.profileName, 'Test User');
+    expect(deps.settings.preferredRoles, contains('Flutter developer'));
   });
 
   testWidgets('pending capture prevents double submit and shows real failure', (

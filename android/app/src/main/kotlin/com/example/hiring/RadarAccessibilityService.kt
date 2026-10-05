@@ -28,6 +28,11 @@ class RadarAccessibilityService : AccessibilityService() {
 
         @Volatile
         var isEnabled: Boolean = false
+
+        /// User's job-preference keywords, pushed from Flutter. A post matching
+        /// any of these passes the gate even without a generic hiring keyword.
+        @Volatile
+        var userKeywords: List<String> = emptyList()
     }
 
     private var lastEmitElapsedMs = 0L
@@ -81,7 +86,9 @@ class RadarAccessibilityService : AccessibilityService() {
 
         for (text in candidates) {
             val lower = text.lowercase()
-            if (keywordGate.none { lower.contains(it) }) continue
+            val matched = keywordGate.any { lower.contains(it) } ||
+                userKeywords.any { kw -> kw.isNotBlank() && lower.contains(kw.lowercase()) }
+            if (!matched) continue
             val hash = text.hashCode()
             if (!seenHashes.add(hash)) continue
             if (seenHashes.size > 300) {

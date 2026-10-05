@@ -9,6 +9,7 @@ import '../../services/capture/capture_provider.dart';
 import '../../services/capture/web_capture_provider.dart';
 import '../../services/analysis/hiring_filter.dart';
 import '../../widgets/page_content.dart';
+import '../../widgets/radar_loader.dart';
 import '../../widgets/surface_card.dart';
 
 /// Capture → cheap filter → AI analysis → save. The AI step is skipped only
@@ -309,6 +310,35 @@ class _AnalyzePageState extends State<AnalyzePage> {
                       ),
                     ],
                   ),
+                  if (_stage == _Stage.analyzing) ...[
+                    const SizedBox(height: 20),
+                    SurfaceCard(
+                      child: Row(
+                        children: [
+                          const RadarLoader(size: 44),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Scanning for hiring signals…',
+                                  style: theme.textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'The AI reads only the text you pasted. Your input stays editable after.',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (_captured != null) ...[
                     const SizedBox(height: 20),
                     const Divider(),
@@ -327,7 +357,7 @@ class _AnalyzePageState extends State<AnalyzePage> {
             const SizedBox(height: 24),
             const Notice(
               icon: Icons.touch_app_outlined,
-              text: 'Hiring Radar prepares you to act. It never applies, connects, emails, or messages for you.',
+              text: 'FeedRadar prepares you to act. It never applies, connects, emails, or messages for you.',
             ),
           ],
         ),

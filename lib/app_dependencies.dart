@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models/captured_post.dart';
 import 'services/analysis/ai_provider.dart';
 import 'services/analysis/gemini_ai_provider.dart';
+import 'services/analysis/nvidia_ai_provider.dart';
 import 'services/opportunities/opportunity_repository.dart';
 import 'services/settings/settings_store.dart';
 
@@ -31,15 +32,20 @@ class AppDependencies extends ChangeNotifier {
   AiProvider? get ai {
     final apiKey = settings.apiKey;
     if (apiKey == null || apiKey.isEmpty) return null;
-    final model = settings.model.isEmpty
-        ? GeminiAiProvider.defaultModel
-        : settings.model;
+    final defaultModel = switch (settings.provider) {
+      AiProviderKind.gemini => GeminiAiProvider.defaultModel,
+      AiProviderKind.nvidia => NvidiaAiProvider.defaultModel,
+      AiProviderKind.openRouter => '',
+    };
+    final model = settings.model.isEmpty ? defaultModel : settings.model;
     if (_builtFor != settings.provider ||
         _builtForModel != model ||
         _ai == null) {
       switch (settings.provider) {
         case AiProviderKind.gemini:
           _ai = GeminiAiProvider(apiKey: apiKey, model: model);
+        case AiProviderKind.nvidia:
+          _ai = NvidiaAiProvider(apiKey: apiKey, model: model);
         case AiProviderKind.openRouter:
           _ai = null; // Not yet connected; the UI communicates this honestly.
       }

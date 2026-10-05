@@ -4,6 +4,7 @@ import '../../app_dependencies.dart';
 import '../../services/platform/android_bridge.dart';
 import '../../services/resume/resume_store.dart';
 import '../../services/settings/settings_store.dart';
+import '../../widgets/keyword_field.dart';
 import '../../widgets/page_content.dart';
 import '../../widgets/surface_card.dart';
 
@@ -20,9 +21,12 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _apiKeyController = TextEditingController();
+  final _modelController = TextEditingController();
   final _nameController = TextEditingController();
   final _headlineController = TextEditingController();
   final _skillsController = TextEditingController();
+  late List<String> _roles = [...widget.deps.settings.preferredRoles];
+  late List<String> _locations = [...widget.deps.settings.preferredLocations];
   bool _obscureKey = true;
   bool _radarEnabled = false;
   String? _resumePath;
@@ -32,6 +36,7 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     final settings = widget.deps.settings;
     _apiKeyController.text = settings.apiKey ?? '';
+    _modelController.text = settings.model;
     _nameController.text = settings.profileName;
     _headlineController.text = settings.profileHeadline;
     _skillsController.text = settings.profileSkills;
@@ -47,6 +52,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _modelController.dispose();
     _nameController.dispose();
     _headlineController.dispose();
     _skillsController.dispose();
@@ -80,7 +86,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 Text('AI analysis', style: theme.textTheme.titleLarge),
                 const SizedBox(height: 8),
                 Text(
-                  'Get a free Gemini API key at aistudio.google.com/apikey and paste it below.',
+                  switch (settings.provider) {
+                    AiProviderKind.gemini => 'Get a free Gemini API key at aistudio.google.com/apikey and paste it below.',
+                    AiProviderKind.nvidia => 'Get a free NVIDIA API key at build.nvidia.com and paste it below. Any chat model from their catalog works, e.g. meta/llama-3.3-70b-instruct.',
+                    AiProviderKind.openRouter =>
+                      'Bring an OpenRouter key from openrouter.ai/keys.',
+                  },
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
@@ -96,6 +107,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     DropdownMenuItem(
                       value: AiProviderKind.gemini,
                       child: Text('Google Gemini (free tier)'),
+                    ),
+                    DropdownMenuItem(
+                      value: AiProviderKind.nvidia,
+                      child: Text('NVIDIA NIM (build.nvidia.com)'),
                     ),
                     DropdownMenuItem(
                       value: AiProviderKind.openRouter,
@@ -117,7 +132,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   enableSuggestions: false,
                   decoration: InputDecoration(
                     labelText: 'API key',
-                    hintText: 'AIza…',
+                    hintText: switch (settings.provider) {
+                      AiProviderKind.gemini => 'AIza…',
+                      AiProviderKind.nvidia => 'nvapi-…',
+                      AiProviderKind.openRouter => 'sk-or-…',
+                    },
                     prefixIcon: const Icon(Icons.key_rounded, size: 21),
                     suffixIcon: IconButton(
                       icon: Icon(
@@ -133,6 +152,25 @@ class _SettingsPageState extends State<SettingsPage> {
                   onFieldSubmitted: _saveKey,
                 ),
                 const SizedBox(height: 16),
+                TextFormField(
+                  key: const Key('model-field'),
+                  controller: _modelController,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: 'Model (optional)',
+                    hintText: switch (settings.provider) {
+                      AiProviderKind.gemini => 'gemini-2.0-flash',
+                      AiProviderKind.nvidia => 'meta/llama-3.3-70b-instruct',
+                      AiProviderKind.openRouter => 'openrouter/model-id',
+                    },
+                    helperText:
+                        'Leave empty to use the provider\'s default model.',
+                    prefixIcon: const Icon(Icons.memory_rounded, size: 21),
+                  ),
+                  onFieldSubmitted: _saveModel,
+                ),
+                const SizedBox(height: 16),
                 Wrap(
                   children: [
                     FilledButton.icon(
@@ -140,6 +178,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       onPressed: () => _saveKey(_apiKeyController.text),
                       icon: const Icon(Icons.save_outlined, size: 18),
                       label: const Text('Save key'),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      key: const Key('save-model-button'),
+                      onPressed: () => _saveModel(_modelController.text),
+                      child: const Text('Save model'),
                     ),
                     const SizedBox(width: 12),
                     TextButton(
@@ -155,7 +199,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 Notice(
                   icon: Icons.shield_outlined,
                   text: widget.deps.hasAiKey
-                      ? 'A key is stored on this device. Requests go directly to ${settings.provider == AiProviderKind.gemini ? 'Google' : 'OpenRouter'} from your browser or app.'
+                      ? 'A key is stored on this device. Requests go directly to ${switch (settings.provider) {
+                          AiProviderKind.gemini => 'Google',
+                          AiProviderKind.nvidia => 'NVIDIA',
+                          AiProviderKind.openRouter => 'OpenRouter',
+                        }} from your browser or app.'
                       : 'No key stored yet. Analysis will run with the offline filter only.',
                 ),
               ],
@@ -198,6 +246,62 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 20),
+          SurfaceCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Job preferences', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Text(
+                  'Your radar only captures posts matching these keywords. Leave both empty to capture every hiring post.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                KeywordField(
+                  key: const Key('pref-roles'),
+                  label: 'Roles or keywords',
+                  hint: 'e.g. Flutter developer, data analyst',
+                  values: _roles,
+                  onChanged: (roles) {
+                    setState(() => _roles = roles);
+                    _saveJobPreferences();
+                  },
+                  suggestions: const [
+                    'Software engineer',
+                    'Flutter developer',
+                    'Data analyst',
+                    'Product designer',
+                    'Internship',
+                  ],
+                ),
+                const SizedBox(height: 20),
+                KeywordField(
+                  key: const Key('pref-locations'),
+                  label: 'Locations (optional)',
+                  hint: 'e.g. Bengaluru, Remote',
+                  values: _locations,
+                  onChanged: (locations) {
+                    setState(() => _locations = locations);
+                    _saveJobPreferences();
+                  },
+                  suggestions: const [
+                    'Remote',
+                    'Bengaluru',
+                    'Delhi NCR',
+                    'Mumbai',
+                    'Pune',
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Notice(
+                  icon: Icons.sync_rounded,
+                  text: 'Synced with the background radar. New keywords start filtering right away.',
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 20),
           SurfaceCard(
             child: Column(
@@ -444,6 +548,22 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _saveModel(String value) async {
+    await widget.deps.settings.setModel(value.trim());
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Model saved. New requests use it.')),
+    );
+  }
+
+  Future<void> _saveJobPreferences() async {
+    final settings = widget.deps.settings;
+    await settings.setPreferredRoles(_roles);
+    await settings.setPreferredLocations(_locations);
+    await AndroidBridge.updateRadarKeywords([..._roles, ..._locations]);
   }
 
   Future<void> _saveKey(String value) async {

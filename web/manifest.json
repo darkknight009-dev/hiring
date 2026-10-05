@@ -1,8 +1,8 @@
 {
   "id": ".",
-  "name": "Hiring Radar",
-  "short_name": "Hiring Radar",
-  "description": "Never miss a hiring post. Your personal opportunity inbox.",
+  "name": "FeedRadar",
+  "short_name": "FeedRadar",
+  "description": "Never miss a hiring post. Your radar watches your feed; you make every move.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

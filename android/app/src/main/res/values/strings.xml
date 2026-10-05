@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Hiring Radar</string>
+    <string name="app_name">FeedRadar</string>
     <string name="radar_service_summary">Captures hiring posts you scroll past</string>
-    <string name="radar_service_description">Hiring Radar reads visible text in the LinkedIn app while you scroll, detects hiring posts locally on this device, and saves them to your inbox. It never clicks, types, sends, or interacts with LinkedIn for you. Disable it any time in Accessibility settings.</string>
+    <string name="radar_service_description">FeedRadar reads visible text in the LinkedIn app while you scroll, detects hiring posts locally on this device, and saves them to your inbox. It never clicks, types, sends, or interacts with LinkedIn for you. Disable it any time in Accessibility settings.</string>
 </resources>

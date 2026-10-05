@@ -106,7 +106,7 @@ class _AppShellState extends State<AppShell> {
               ],
               Expanded(
                 child: Text(
-                  desktop ? _destination.label : 'Hiring Radar',
+                  desktop ? _destination.label : 'FeedRadar',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -125,7 +125,10 @@ class _AppShellState extends State<AppShell> {
           ),
         ),
         Expanded(
-          child: IndexedStack(index: _destination.index, children: pages),
+          child: _AnimatedIndexedStack(
+            index: _destination.index,
+            children: pages,
+          ),
         ),
       ],
     );
@@ -155,7 +158,7 @@ class _AppShellState extends State<AppShell> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Hiring Radar',
+                              'FeedRadar',
                               style: theme.textTheme.titleLarge,
                             ),
                           ),
@@ -201,7 +204,7 @@ class _AppShellState extends State<AppShell> {
                     Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        'WEB PREVIEW  /  0.2',
+                        'FEEDRADAR  ·  0.4',
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: colors.onSurfaceVariant,
                           letterSpacing: 1,
@@ -231,4 +234,83 @@ class _AppShellState extends State<AppShell> {
             ),
     );
   }
+}
+
+/// An [IndexedStack] that reveals the newly selected page with a short fade
+/// and slide. The stack keeps every page's state, so in-progress forms and
+/// scroll positions survive tab switches.
+class _AnimatedIndexedStack extends StatelessWidget {
+  const _AnimatedIndexedStack({required this.index, required this.children});
+
+  final int index;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => IndexedStack(
+    index: index,
+    children: [
+      for (var i = 0; i < children.length; i++)
+        _PageReveal(active: i == index, child: children[i]),
+    ],
+  );
+}
+
+class _PageReveal extends StatefulWidget {
+  const _PageReveal({required this.active, required this.child});
+
+  final bool active;
+  final Widget child;
+
+  @override
+  State<_PageReveal> createState() => _PageRevealState();
+}
+
+class _PageRevealState extends State<_PageReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 340),
+  );
+  late final CurvedAnimation _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+  late final Animation<Offset> _offset = Tween<Offset>(
+    begin: const Offset(0, 0.02),
+    end: Offset.zero,
+  ).animate(_curve);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) {
+      // A soft entrance for the first page on app launch.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _controller.forward(from: 0);
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(_PageReveal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _controller.forward(from: 0);
+    } else if (!widget.active && oldWidget.active) {
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _curve.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: _curve,
+    child: SlideTransition(position: _offset, child: widget.child),
+  );
 }

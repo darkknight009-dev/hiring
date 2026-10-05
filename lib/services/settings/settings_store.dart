@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/opportunity_entity.dart';
 
 /// Where AI analysis runs and which key it uses. Keys stay on the device.
-enum AiProviderKind { gemini, openRouter }
+enum AiProviderKind { gemini, openRouter, nvidia }
 
 class SettingsStore {
   SettingsStore({required this.prefs});
@@ -21,13 +21,15 @@ class SettingsStore {
   static const _keyProfileTone = 'profile.tone';
   static const _keyResumePath = 'resume.path';
   static const _keyReminderHours = 'radar.reminderHours';
+  static const _keyOnboarded = 'onboarding.done';
+  static const _keyPrefRoles = 'prefs.roles';
+  static const _keyPrefLocations = 'prefs.locations';
 
-  AiProviderKind get provider {
-    final value = prefs.getString(_keyProvider);
-    return value == 'openRouter'
-        ? AiProviderKind.openRouter
-        : AiProviderKind.gemini;
-  }
+  AiProviderKind get provider => switch (prefs.getString(_keyProvider)) {
+    'openRouter' => AiProviderKind.openRouter,
+    'nvidia' => AiProviderKind.nvidia,
+    _ => AiProviderKind.gemini,
+  };
 
   Future<void> setProvider(AiProviderKind value) =>
       prefs.setString(_keyProvider, value.name);
@@ -100,4 +102,48 @@ class SettingsStore {
 
   Future<void> setReminderHours(int value) =>
       prefs.setInt(_keyReminderHours, value);
+
+  /// Whether the first-launch onboarding has been completed.
+  bool get onboarded => prefs.getBool(_keyOnboarded) ?? false;
+
+  Future<void> setOnboarded(bool value) => prefs.setBool(_keyOnboarded, value);
+
+  /// Job roles or keywords the radar should watch for, e.g. `Flutter developer`.
+  List<String> get preferredRoles => _keywordList(_keyPrefRoles);
+
+  Future<void> setPreferredRoles(List<String> value) =>
+      prefs.setStringList(_keyPrefRoles, _cleanKeywords(value));
+
+  /// Locations the radar should watch for, e.g. `Bengaluru` or `Remote`.
+  List<String> get preferredLocations => _keywordList(_keyPrefLocations);
+
+  Future<void> setPreferredLocations(List<String> value) =>
+      prefs.setStringList(_keyPrefLocations, _cleanKeywords(value));
+
+  bool get hasJobPreferences =>
+      preferredRoles.isNotEmpty || preferredLocations.isNotEmpty;
+
+  /// The radar-side filter: a post is captured only when it matches the user's
+  /// job preferences. Roles and locations each act as OR-lists; when both are
+  /// set a post must mention at least one of each. No preferences means every
+  /// hiring post passes.
+  bool matchesJobPreferences(String text) {
+    final roles = preferredRoles;
+    final locations = preferredLocations;
+    if (roles.isEmpty && locations.isEmpty) return true;
+    final normalized = text.toLowerCase();
+    bool anyMentioned(List<String> needles) =>
+        needles.any((needle) => normalized.contains(needle.toLowerCase()));
+    if (roles.isNotEmpty && !anyMentioned(roles)) return false;
+    if (locations.isNotEmpty && !anyMentioned(locations)) return false;
+    return true;
+  }
+
+  List<String> _keywordList(String key) =>
+      List.unmodifiable(prefs.getStringList(key) ?? const <String>[]);
+
+  static List<String> _cleanKeywords(List<String> value) => value
+      .map((entry) => entry.trim())
+      .where((entry) => entry.isNotEmpty)
+      .toList();
 }
