@@ -48,6 +48,9 @@ class RadarCapture {
       _queue.add(post);
       _drain();
     });
+    // Subscribe first, then pull: posts captured while no engine was
+    // listening are flushed into the stream by this call.
+    AndroidBridge.startRadarListener();
   }
 
   /// Pushes the user's job preferences into the native radar pre-filter so
@@ -95,6 +98,11 @@ class RadarCapture {
     if (_recentHashes.length > _maxRemembered) {
       _recentHashes.removeAt(0);
     }
+
+    // Already in the inbox from an earlier session (e.g. re-scrolled after a
+    // reinstall, where in-memory dedupe no longer applies)? Never duplicate.
+    final existing = await _deps.repository.loadAll();
+    if (existing.any((o) => o.text != null && o.text == post.text)) return;
 
     final settings = _deps.settings;
     final prefsMatch = settings.matchesJobPreferences(post.text);

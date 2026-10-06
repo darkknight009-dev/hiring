@@ -112,6 +112,29 @@ class AndroidBridge {
     String mode = 'score',
   }) => _call<void>('updateRadarStats', {'stats': stats, 'mode': mode});
 
+  /// Attaches the native radar push listener and drains posts the service
+  /// buffered while no Flutter engine was listening. Call only after
+  /// subscribing to [radarPosts]; until then the native side keeps
+  /// buffering so nothing is lost.
+  static Future<void> startRadarListener() async {
+    if (kIsWeb) return;
+    try {
+      final pending = await _channel.invokeListMethod<Map<Object?, Object?>>(
+        'startRadarListener',
+      );
+      for (final raw in pending ?? const <Map<Object?, Object?>>[]) {
+        final post = RadarPost.fromExtras(
+          raw.map((key, value) => MapEntry(key.toString(), value)),
+        );
+        if (post != null) _radarPosts.add(post);
+      }
+    } on MissingPluginException {
+      // Not on a device: nothing buffered.
+    } on PlatformException {
+      // Native side unavailable: the next post will still arrive via push.
+    }
+  }
+
   static Future<void> openEmail({
     required String to,
     required String subject,

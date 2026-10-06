@@ -94,6 +94,16 @@ class MainActivity : FlutterActivity() {
                     RadarAccessibilityService.applyFlutterStats(stats, mode)
                     result.success(null)
                 }
+                "startRadarListener" -> {
+                    // Dart is now subscribed: attach the push listener and
+                    // return anything captured while no engine was listening.
+                    val pending = RadarAccessibilityService.attach { payload ->
+                        runOnUiThread {
+                            shareChannel.invokeMethod("onRadarPost", payload)
+                        }
+                    }
+                    result.success(pending)
+                }
                 "openEmail" -> {
                     val args = call.arguments as? Map<*, *>
                     openEmail(
@@ -108,14 +118,18 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // Bridge radar captures from the accessibility service to Flutter.
-        // Posts captured while no engine was listening are flushed here too.
-        RadarAccessibilityService.attach { payload ->
-            runOnUiThread {
-                shareChannel.invokeMethod("onRadarPost", payload)
-            }
-        }
+        // NOTE: the radar listener is NOT attached here. configureFlutterEngine
+        // runs before the Dart isolate subscribes to the post stream, so a
+        // flush here would drop every buffered post. RadarCapture.start()
+        // pulls them via the "startRadarListener" channel call instead.
         createNotificationChannel()
+    }
+
+    override fun onDestroy() {
+        // Engine is going away: stop pushing into it; captures are buffered
+        // in the service until the next startRadarListener call.
+        RadarAccessibilityService.attach(null)
+        super.onDestroy()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -81,23 +81,23 @@ class RadarAccessibilityService : AccessibilityService() {
         @Volatile
         private var instance: RadarAccessibilityService? = null
 
-        /// Registers the Flutter listener and flushes anything buffered while
-        /// no engine was attached.
-        fun attach(newListener: ((Map<String, String?>) -> Unit)?) {
+        /// Registers the Flutter listener and drains posts buffered while no
+        /// engine was listening. Returns the drained posts instead of pushing
+        /// them: this runs before the Dart isolate has subscribed to the
+        /// stream, so Dart pulls them explicitly once it is ready.
+        fun attach(newListener: ((Map<String, String?>) -> Unit)?): List<Map<String, String?>> {
             listener = newListener
+            val drained = ArrayList<Map<String, String?>>()
             if (newListener != null) {
                 while (true) {
                     val payload = synchronized(pendingPayloads) {
                         pendingPayloads.removeFirstOrNull()
                     } ?: break
-                    try {
-                        newListener(payload)
-                    } catch (_: Exception) {
-                        // Never crash on Dart-side issues.
-                    }
+                    drained.add(payload)
                 }
             }
             instance?.refreshStatus()
+            return drained
         }
 
         /// Called from the method channel with the Flutter-side counters
@@ -144,18 +144,8 @@ class RadarAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        android.util.Log.d(
-            "FeedRadar",
-            "event type=${event.eventType} pkg=${event.packageName}"
-        )
-        val root: AccessibilityNodeInfo = rootInActiveWindow ?: run {
-            android.util.Log.d("FeedRadar", "rootInActiveWindow is null")
-            return
-        }
-        if (root.packageName?.toString() != LINKEDIN_PACKAGE) {
-            android.util.Log.d("FeedRadar", "wrong package: ${root.packageName}")
-            return
-        }
+        val root: AccessibilityNodeInfo = rootInActiveWindow ?: return
+        if (root.packageName?.toString() != LINKEDIN_PACKAGE) return
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastEmitElapsedMs < MIN_EVENT_INTERVAL_MS) return
@@ -164,7 +154,6 @@ class RadarAccessibilityService : AccessibilityService() {
         val texts = ArrayList<String>()
         collectTexts(root, texts, 0)
         root.recycleCompat()
-        android.util.Log.d("FeedRadar", "collected ${texts.size} texts")
         if (texts.isEmpty()) return
 
         // Heuristic: the longest visible text blocks are post bodies.
