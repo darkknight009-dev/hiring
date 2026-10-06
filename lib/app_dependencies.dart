@@ -3,7 +3,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/captured_post.dart';
 import 'services/analysis/ai_provider.dart';
-import 'services/analysis/gemini_ai_provider.dart';
 import 'services/analysis/nvidia_ai_provider.dart';
 import 'services/opportunities/opportunity_repository.dart';
 import 'services/settings/settings_store.dart';
@@ -11,7 +10,7 @@ import 'services/settings/settings_store.dart';
 /// Widget-scoped dependency container. Created once in main() and passed to
 /// the app; features reach it through `context.dep`.
 class AppDependencies extends ChangeNotifier {
-  AppDependencies({required this.prefs})
+  AppDependencies({required this.prefs, this.aiOverride})
     : settings = SettingsStore(prefs: prefs),
       repository = OpportunityRepository(prefs: prefs);
 
@@ -20,42 +19,16 @@ class AppDependencies extends ChangeNotifier {
   final OpportunityRepository repository;
 
   CapturedPost? _pendingCapture;
+  final AiProvider? aiOverride;
   AiProvider? _ai;
-  AiProviderKind? _builtFor;
-  String? _builtForModel;
 
   /// A shared-in post waiting to be analyzed. The shell navigates to the
   /// capture screen when this is set.
   bool get hasPendingCapture => _pendingCapture != null;
 
-  /// Builds the AI provider from stored settings, or null without a key.
-  AiProvider? get ai {
-    final apiKey = settings.apiKey;
-    if (apiKey == null || apiKey.isEmpty) return null;
-    final defaultModel = switch (settings.provider) {
-      AiProviderKind.gemini => GeminiAiProvider.defaultModel,
-      AiProviderKind.nvidia => NvidiaAiProvider.defaultModel,
-      AiProviderKind.openRouter => '',
-    };
-    final model = settings.model.isEmpty ? defaultModel : settings.model;
-    if (_builtFor != settings.provider ||
-        _builtForModel != model ||
-        _ai == null) {
-      switch (settings.provider) {
-        case AiProviderKind.gemini:
-          _ai = GeminiAiProvider(apiKey: apiKey, model: model);
-        case AiProviderKind.nvidia:
-          _ai = NvidiaAiProvider(apiKey: apiKey, model: model);
-        case AiProviderKind.openRouter:
-          _ai = null; // Not yet connected; the UI communicates this honestly.
-      }
-      _builtFor = settings.provider;
-      _builtForModel = model;
-    }
-    return _ai;
-  }
-
-  bool get hasAiKey => (settings.apiKey ?? '').isNotEmpty;
+  /// The built-in AI provider (NVIDIA NIM with an embedded key). Users never
+  /// configure a key; tests inject [aiOverride] to stay off the network.
+  AiProvider get ai => _ai ??= aiOverride ?? NvidiaAiProvider();
 
   /// Public signal for services (radar, outreach) that mutate data outside
   /// the widget tree and need the UI to refresh.

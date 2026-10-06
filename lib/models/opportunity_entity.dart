@@ -19,6 +19,9 @@ class Opportunity {
     this.capturedVia = 'manual',
     this.connectionState = 'none',
     this.drafts = const {},
+    this.posterName,
+    this.posterHeadline,
+    this.posterProfile,
   });
 
   /// Statuses are explicit; the user moves an opportunity through them.
@@ -52,6 +55,15 @@ class Opportunity {
   /// Keyed by draft kind: connectionNote, dm, email.
   final Map<String, OutreachDraft> drafts;
 
+  /// Who posted, captured by the radar from the post card header (or by AI
+  /// from the post text for manual captures).
+  final String? posterName;
+  final String? posterHeadline;
+
+  /// The poster's full LinkedIn profile screen, captured read-only when the
+  /// user opened it in LinkedIn after the post was saved.
+  final String? posterProfile;
+
   bool get isHiring => analysis.isHiring;
 
   OutreachScenario get scenario =>
@@ -78,6 +90,9 @@ class Opportunity {
     PostAnalysis? analysis,
     String? connectionState,
     Map<String, OutreachDraft>? drafts,
+    String? posterName,
+    String? posterHeadline,
+    String? posterProfile,
   }) => Opportunity(
     id: id,
     createdAt: createdAt,
@@ -89,6 +104,9 @@ class Opportunity {
     capturedVia: capturedVia,
     connectionState: connectionState ?? this.connectionState,
     drafts: drafts ?? this.drafts,
+    posterName: posterName ?? this.posterName,
+    posterHeadline: posterHeadline ?? this.posterHeadline,
+    posterProfile: posterProfile ?? this.posterProfile,
   );
 
   factory Opportunity.fromJson(Map<String, dynamic> json) {
@@ -118,6 +136,9 @@ class Opportunity {
       capturedVia: json['capturedVia'] as String? ?? 'manual',
       connectionState: json['connectionState'] as String? ?? 'none',
       drafts: Map.unmodifiable(drafts),
+      posterName: json['posterName'] as String?,
+      posterHeadline: json['posterHeadline'] as String?,
+      posterProfile: json['posterProfile'] as String?,
     );
   }
 
@@ -132,6 +153,9 @@ class Opportunity {
     'capturedVia': capturedVia,
     'connectionState': connectionState,
     'drafts': drafts.map((key, value) => MapEntry(key, value.toJson())),
+    'posterName': posterName,
+    'posterHeadline': posterHeadline,
+    'posterProfile': posterProfile,
   };
 
   /// For tests and previews; a CapturedPost is raw input, not an Opportunity.
@@ -151,6 +175,7 @@ class Opportunity {
       text: post.text,
       url: post.url,
       capturedVia: capturedVia,
+      posterName: analysis.posterName,
     );
   }
 }

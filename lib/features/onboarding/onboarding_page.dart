@@ -46,6 +46,28 @@ class _OnboardingPageState extends State<OnboardingPage> {
     _locations = [...widget.deps.settings.preferredLocations];
     _nameController.text = widget.deps.settings.profileName;
     _headlineController.text = widget.deps.settings.profileHeadline;
+    _nameController.addListener(_onValueChanged);
+  }
+
+  void _onValueChanged() => setState(() {});
+
+  /// The forward action is blocked until the current step has real values:
+  /// a name on the profile step, at least one keyword on the preferences
+  /// step. No more continuing with everything empty.
+  bool get _canContinue => switch (_step) {
+    _Step.welcome => true,
+    _Step.profile => _nameController.text.trim().isNotEmpty,
+    _Step.preferences => _roles.isNotEmpty || _locations.isNotEmpty,
+  };
+
+  String? get _continueHint {
+    if (_canContinue) return null;
+    return switch (_step) {
+      _Step.profile => 'Add your name to continue.',
+      _Step.preferences =>
+        'Add at least one role or location so your radar knows what to catch.',
+      _Step.welcome => null,
+    };
   }
 
   @override
@@ -70,7 +92,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
     await settings.setOnboarded(true);
     // Best-effort native push; the Dart-side preference filter is the
     // authoritative gate, so this never blocks onboarding.
-    unawaited(AndroidBridge.updateRadarKeywords([..._roles, ..._locations]));
+    unawaited(
+      AndroidBridge.updateRadarKeywords(roles: _roles, locations: _locations),
+    );
     // Give the tuning animation a beat before landing in the app.
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (!mounted) return;
@@ -166,42 +190,66 @@ class _OnboardingPageState extends State<OnboardingPage> {
                             top: false,
                             child: Padding(
                               padding: const EdgeInsets.only(bottom: 12),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  if (_step != _Step.welcome)
-                                    TextButton.icon(
-                                      onPressed: () =>
-                                          _goTo(_Step.values[_step.index - 1]),
-                                      icon: const Icon(
-                                        Icons.arrow_back_rounded,
-                                        size: 18,
+                                  if (_continueHint != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 8,
+                                        right: 4,
                                       ),
-                                      label: const Text('Back'),
+                                      child: Text(
+                                        _continueHint!,
+                                        textAlign: TextAlign.right,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(color: colors.error),
+                                      ),
                                     ),
-                                  const Spacer(),
-                                  if (_step != _Step.preferences)
-                                    FilledButton.icon(
-                                      onPressed: () =>
-                                          _goTo(_Step.values[_step.index + 1]),
-                                      icon: const Icon(
-                                        Icons.arrow_forward_rounded,
-                                        size: 18,
-                                      ),
-                                      label: Text(
-                                        _step == _Step.welcome
-                                            ? 'Get started'
-                                            : 'Continue',
-                                      ),
-                                    )
-                                  else
-                                    FilledButton.icon(
-                                      onPressed: _finish,
-                                      icon: const Icon(
-                                        Icons.radar_rounded,
-                                        size: 18,
-                                      ),
-                                      label: const Text('Tune my radar'),
-                                    ),
+                                  Row(
+                                    children: [
+                                      if (_step != _Step.welcome)
+                                        TextButton.icon(
+                                          onPressed: () => _goTo(
+                                            _Step.values[_step.index - 1],
+                                          ),
+                                          icon: const Icon(
+                                            Icons.arrow_back_rounded,
+                                            size: 18,
+                                          ),
+                                          label: const Text('Back'),
+                                        ),
+                                      const Spacer(),
+                                      if (_step != _Step.preferences)
+                                        FilledButton.icon(
+                                          onPressed: _canContinue
+                                              ? () => _goTo(
+                                                  _Step.values[_step.index + 1],
+                                                )
+                                              : null,
+                                          icon: const Icon(
+                                            Icons.arrow_forward_rounded,
+                                            size: 18,
+                                          ),
+                                          label: Text(
+                                            _step == _Step.welcome
+                                                ? 'Get started'
+                                                : 'Continue',
+                                          ),
+                                        )
+                                      else
+                                        FilledButton.icon(
+                                          onPressed: _canContinue
+                                              ? _finish
+                                              : null,
+                                          icon: const Icon(
+                                            Icons.radar_rounded,
+                                            size: 18,
+                                          ),
+                                          label: const Text('Tune my radar'),
+                                        ),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),
@@ -257,10 +305,10 @@ class _WelcomeStep extends StatelessWidget {
               const SizedBox(height: 16),
               _Bullet(
                 icon: Icons.auto_awesome_outlined,
-                title: 'Your AI, your key',
+                title: 'Built-in AI',
                 body:
-                    'Your own Gemini or NVIDIA key analyzes posts and drafts '
-                    'connection notes, messages, and emails. Keys stay on this device.',
+                    'Posts are analyzed and outreach drafts are written by '
+                    'built-in NVIDIA AI. No keys to create, no setup — it just works.',
               ),
               const SizedBox(height: 16),
               _Bullet(
@@ -421,8 +469,8 @@ class _PreferencesStep extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Only posts mentioning your roles — and your locations, if you add '
-            'them — are captured. Leave everything empty to capture all hiring '
-            'posts. Change this anytime in Settings.',
+            'them — are captured. Add at least one keyword to tune your radar. '
+            'Change this anytime in Settings.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colors.onSurfaceVariant,
             ),

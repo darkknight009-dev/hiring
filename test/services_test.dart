@@ -357,7 +357,7 @@ void main() {
         expect(request.url.path, '/v1/chat/completions');
         expect(request.headers['Authorization'], 'Bearer nvapi-test');
         final body = jsonDecode(request.body) as Map<String, dynamic>;
-        expect(body['model'], 'meta/llama-3.3-70b-instruct');
+        expect(body['model'], NvidiaAiProvider.defaultModel);
         return http.Response(
           jsonEncode({
             'choices': [
@@ -387,7 +387,7 @@ void main() {
       );
       expect(result.analysis.isHiring, isTrue);
       expect(result.analysis.role, 'Flutter Developer');
-      expect(result.modelUsed, 'meta/llama-3.3-70b-instruct');
+      expect(result.modelUsed, NvidiaAiProvider.defaultModel);
     });
 
     test('a rejected key surfaces a clear error', () async {

@@ -143,27 +143,26 @@ class _AnalyzePageState extends State<AnalyzePage> {
 
   Future<void> _runAnalysis(CapturedPost captured) async {
     final postText = captured.text ?? '';
-    final deps = widget.deps;
+    final ai = widget.deps.ai;
 
-    // Offline gate: skip AI spend on obvious non-hiring posts.
-    if (postText.isNotEmpty && !looksLikeHiringPost(postText)) {
+    // Nothing for the filters or the AI to read without the post text.
+    if (postText.isEmpty) {
       setState(() {
         _captured = captured;
         _analysis = null;
-        _analysisNote = 'The offline filter found no hiring signals, so no AI analysis was run. You can still save or edit the capture.';
+        _analysisNote =
+            'Add the post text so the offline filter and AI can read it.';
         _stage = _Stage.done;
       });
       return;
     }
 
-    final ai = deps.ai;
-    if (ai == null) {
+    // Offline gate: skip AI spend on obvious non-hiring posts.
+    if (!looksLikeHiringPost(postText)) {
       setState(() {
         _captured = captured;
         _analysis = null;
-        _analysisNote = postText.isEmpty
-            ? 'Add the post text so the offline filter and AI can read it.'
-            : 'No AI key configured. Open Settings to add your Gemini API key, then analyze again.';
+        _analysisNote = 'The offline filter found no hiring signals, so no AI analysis was run. You can still save or edit the capture.';
         _stage = _Stage.done;
       });
       return;

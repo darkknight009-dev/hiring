@@ -64,6 +64,11 @@ class AndroidBridge {
   static Future<bool> isRadarEnabled() async =>
       await _call<bool>('isRadarEnabled') ?? false;
 
+  /// True when the user paused capture. The accessibility service is still
+  /// enabled, so resuming needs no new permission.
+  static Future<bool> isRadarPaused() async =>
+      await _call<bool>('isRadarPaused') ?? false;
+
   static Future<void> openAccessibilitySettings() =>
       _call<void>('openAccessibilitySettings');
 
@@ -92,16 +97,39 @@ class AndroidBridge {
   static Future<void> cancelReminder(String key) =>
       _call<void>('cancelReminder', {'key': key});
 
-  /// Pushes the user's job-preference keywords into the native radar so its
-  /// pre-filter admits posts the user actually cares about.
-  static Future<void> updateRadarKeywords(List<String> keywords) =>
-      _call<void>('updateRadarKeywords', {'keywords': keywords});
+  /// Pushes the user's job preferences into the native radar so its first
+  /// filter mirrors the Dart-side second filter exactly: with preferences
+  /// set, a post must mention one of [roles] and (when [locations] is set)
+  /// one of the locations to be forwarded at all.
+  static Future<void> updateRadarKeywords({
+    required List<String> roles,
+    required List<String> locations,
+  }) => _call<void>('updateRadarKeywords', {
+    'roles': roles,
+    'locations': locations,
+  });
+
+  /// Pauses the background radar. The accessibility service stays enabled, so
+  /// [resumeRadar] starts capturing again without any permission prompt.
+  static Future<void> pauseRadar() => _call<void>('pauseRadar');
+
+  static Future<void> resumeRadar() => _call<void>('resumeRadar');
 
   /// Test-only: pushes a post into [radarPosts] as if the native service had
   /// observed it. Never called in production code.
   @visibleForTesting
-  static void debugEmitRadarPost(String text, {String? author}) {
-    final post = RadarPost(text: text, author: author);
+  static void debugEmitRadarPost(
+    String text, {
+    String? author,
+    String? headline,
+    String kind = 'post',
+  }) {
+    final post = RadarPost(
+      text: text,
+      author: author,
+      headline: headline,
+      kind: kind,
+    );
     _radarPosts.add(post);
   }
 
@@ -148,20 +176,40 @@ class AndroidBridge {
   });
 }
 
-/// A post observed by the Android radar while the user scrolled LinkedIn.
+/// A post (or poster-profile screen) observed by the Android radar while the
+/// user scrolled LinkedIn.
 class RadarPost {
-  const RadarPost({required this.text, this.author});
+  const RadarPost({
+    required this.text,
+    this.author,
+    this.headline,
+    this.kind = 'post',
+  });
 
   final String text;
+
+  /// Poster name, read from the post card header by the native service.
   final String? author;
+
+  /// Poster headline rendered under their name ("Recruiter at Acme · 2nd").
+  final String? headline;
+
+  /// `post` for a feed post card; `profile` for the poster's profile screen.
+  final String kind;
 
   static RadarPost? fromExtras(Map<String, Object?>? extras) {
     final text = (extras?['text'] as String?)?.trim() ?? '';
     if (text.isEmpty) return null;
-    final author = (extras?['author'] as String?)?.trim();
+    String? readNonEmpty(String key) {
+      final value = (extras?[key] as String?)?.trim();
+      return (value == null || value.isEmpty) ? null : value;
+    }
+
     return RadarPost(
       text: text,
-      author: (author == null || author.isEmpty) ? null : author,
+      author: readNonEmpty('author'),
+      headline: readNonEmpty('headline'),
+      kind: readNonEmpty('kind') == 'profile' ? 'profile' : 'post',
     );
   }
 }

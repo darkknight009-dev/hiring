@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">FeedRadar</string>
     <string name="radar_service_summary">Captures hiring posts you scroll past</string>
-    <string name="radar_service_description">FeedRadar reads visible text in the LinkedIn app while you scroll, detects hiring posts locally on this device, and saves them to your inbox. It never clicks, types, sends, or interacts with LinkedIn for you. Disable it any time in Accessibility settings.</string>
+    <string name="radar_service_description">FeedRadar reads visible text in the LinkedIn app while you scroll, detects hiring posts locally on this device, and saves them to your inbox. It never clicks, types, sends, or interacts with LinkedIn for you. Stop and resume capture from inside the app at any time; turning the service off here is only needed to remove access completely.</string>
 </resources>

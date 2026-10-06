@@ -30,18 +30,12 @@ class OutreachService {
     required Opportunity opportunity,
     required String kind,
   }) async {
-    final ai = _deps.ai;
-    if (ai == null) {
-      throw const AiAnalysisException(
-        'No AI key configured. Add your Gemini API key in Settings first.',
-      );
-    }
     if (!_profile.hasContent) {
       throw const AiAnalysisException(
         'Add your name and headline in Settings → Your profile so drafts are personal.',
       );
     }
-    final draft = await ai.generateDraft(
+    final draft = await _deps.ai.generateDraft(
       kind: kind,
       postText: opportunity.text ?? opportunity.analysis.summary ?? '',
       posterName: _guessPoster(opportunity),

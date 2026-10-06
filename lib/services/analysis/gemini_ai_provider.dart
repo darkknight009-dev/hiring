@@ -125,13 +125,18 @@ class GeminiAiProvider implements AiProvider {
     required String systemInstruction,
     required int maxOutputTokens,
   }) async {
-    final uri = Uri.https(endpointHost, endpointPath, {'key': apiKey});
+    // The key travels in a header, never in the URL query string, so it
+    // cannot leak through proxy or request logs.
+    final uri = Uri.https(endpointHost, endpointPath);
     final http.Response response;
     try {
       response = await _client
           .post(
             uri,
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': apiKey,
+            },
             body: jsonEncode({
               'systemInstruction': {
                 'parts': [

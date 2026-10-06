@@ -42,6 +42,7 @@ class MainActivity : FlutterActivity() {
                     pendingShared = null
                 }
                 "isRadarEnabled" -> result.success(isRadarEnabled())
+                "isRadarPaused" -> result.success(RadarAccessibilityService.isPaused)
                 "openAccessibilitySettings" -> {
                     startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     result.success(null)
@@ -77,10 +78,22 @@ class MainActivity : FlutterActivity() {
                 }
                 "updateRadarKeywords" -> {
                     val args = call.arguments as? Map<*, *>
-                    val keywords = (args?.get("keywords") as? List<*>)
+                    val roles = (args?.get("roles") as? List<*>)
                         ?.filterIsInstance<String>()
                         .orEmpty()
-                    RadarAccessibilityService.userKeywords = keywords
+                    val locations = (args?.get("locations") as? List<*>)
+                        ?.filterIsInstance<String>()
+                        .orEmpty()
+                    RadarAccessibilityService.userRoles = roles
+                    RadarAccessibilityService.userLocations = locations
+                    result.success(null)
+                }
+                "pauseRadar" -> {
+                    RadarAccessibilityService.pauseCapture()
+                    result.success(null)
+                }
+                "resumeRadar" -> {
+                    RadarAccessibilityService.resumeCapture()
                     result.success(null)
                 }
                 "updateRadarStats" -> {

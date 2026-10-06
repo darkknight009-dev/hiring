@@ -4,6 +4,7 @@ import 'app_dependencies.dart';
 import 'core/theme/app_theme.dart';
 import 'features/onboarding/onboarding_page.dart';
 import 'widgets/app_shell.dart';
+import 'widgets/splash_page.dart';
 
 class HiringRadarApp extends StatefulWidget {
   const HiringRadarApp({super.key, required this.deps});
@@ -17,6 +18,7 @@ class HiringRadarApp extends StatefulWidget {
 class _HiringRadarAppState extends State<HiringRadarApp> {
   ThemeMode _themeMode = ThemeMode.system;
   late bool _onboarded = widget.deps.settings.onboarded;
+  bool _splashDone = false;
 
   void _toggleTheme() {
     final dark =
@@ -25,6 +27,11 @@ class _HiringRadarAppState extends State<HiringRadarApp> {
             WidgetsBinding.instance.platformDispatcher.platformBrightness ==
                 Brightness.dark);
     setState(() => _themeMode = dark ? ThemeMode.light : ThemeMode.dark);
+  }
+
+  void _finishSplash() {
+    if (!mounted) return;
+    setState(() => _splashDone = true);
   }
 
   void _completeOnboarding() {
@@ -51,7 +58,12 @@ class _HiringRadarAppState extends State<HiringRadarApp> {
             child: child,
           ),
         ),
-        child: _onboarded
+        child: !_splashDone
+            ? KeyedSubtree(
+                key: const ValueKey('splash'),
+                child: SplashPage(onFinished: _finishSplash),
+              )
+            : _onboarded
             ? KeyedSubtree(
                 key: const ValueKey('app-shell'),
                 child: AppShell(onToggleTheme: _toggleTheme, deps: widget.deps),

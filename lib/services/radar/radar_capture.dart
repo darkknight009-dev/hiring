@@ -54,14 +54,14 @@ class RadarCapture {
   }
 
   /// Pushes the user's job preferences into the native radar pre-filter so
-  /// its keyword gate admits posts the user actually cares about. Called at
-  /// startup and whenever preferences change in the UI.
+  /// its keyword gate mirrors the Dart-side filter. Called at startup and
+  /// whenever preferences change in the UI.
   void syncPreferences() {
     final settings = _deps.settings;
-    AndroidBridge.updateRadarKeywords([
-      ...settings.preferredRoles,
-      ...settings.preferredLocations,
-    ]);
+    AndroidBridge.updateRadarKeywords(
+      roles: settings.preferredRoles,
+      locations: settings.preferredLocations,
+    );
   }
 
   Future<void> _drain() async {
@@ -92,6 +92,10 @@ class RadarCapture {
   }
 
   Future<void> _handle(RadarPost post) async {
+    if (post.kind == 'profile') {
+      await _attachProfile(post);
+      return;
+    }
     final hash = post.text.hashCode;
     if (_recentHashes.contains(hash)) return;
     _recentHashes.add(hash);
@@ -123,31 +127,22 @@ class RadarCapture {
     _publishStats();
 
     PostAnalysis analysis;
-    final ai = _deps.ai;
-    if (ai != null) {
-      try {
-        final result = await ai.analyzePost(text: post.text);
-        analysis = result.analysis;
-        if (!analysis.isHiring) {
-          // AI confirmed it is not a hiring post.
-          _aiRejected++;
-          _publishStats();
-          return;
-        }
-        _aiHiring++;
-      } on AiAnalysisException {
-        _aiFailed++;
-        analysis = const PostAnalysis(
-          isHiring: true,
-          confidence: null,
-          summary: 'Captured by radar; AI analysis failed. Analyze again from the inbox.',
-        );
+    try {
+      final result = await _deps.ai.analyzePost(text: post.text);
+      analysis = result.analysis;
+      if (!analysis.isHiring) {
+        // AI confirmed it is not a hiring post.
+        _aiRejected++;
+        _publishStats();
+        return;
       }
-    } else {
+      _aiHiring++;
+    } on AiAnalysisException {
+      _aiFailed++;
       analysis = const PostAnalysis(
         isHiring: true,
         confidence: null,
-        summary: 'Captured by radar; no AI key configured yet.',
+        summary: 'Captured by radar; AI analysis failed. Analyze again from the inbox.',
       );
     }
 
@@ -159,6 +154,8 @@ class RadarCapture {
       analysis: analysis,
       text: post.text,
       capturedVia: 'radar',
+      posterName: post.author ?? analysis.posterName,
+      posterHeadline: post.headline,
     );
     await _deps.repository.save(opportunity);
     await _deps.setPendingCapture(null);
@@ -171,5 +168,24 @@ class RadarCapture {
       id: opportunity.id.hashCode,
     );
     _deps.dataChanged();
+  }
+
+  /// Attaches a captured poster-profile screen to the saved opportunity whose
+  /// poster name appears near the top of the profile text. Profiles that
+  /// match nothing are silently dropped; they were for someone else's page.
+  Future<void> _attachProfile(RadarPost profile) async {
+    final text = profile.text;
+    final head = (text.length > 600 ? text.substring(0, 600) : text)
+        .toLowerCase();
+    final all = await _deps.repository.loadAll();
+    for (final opportunity in all) {
+      final name = opportunity.posterName;
+      if (name == null || name.isEmpty) continue;
+      if (!head.contains(name.toLowerCase())) continue;
+      if (opportunity.posterProfile == text) return;
+      await _deps.repository.save(opportunity.copyWith(posterProfile: text));
+      _deps.dataChanged();
+      return;
+    }
   }
 }

@@ -91,6 +91,7 @@ class _OpportunitiesPageState extends State<OpportunitiesPage> {
                   o.displayTitle,
                   o.analysis.role ?? '',
                   o.analysis.company ?? '',
+                  o.posterName ?? '',
                   o.text ?? '',
                 ].join(' ').toLowerCase();
                 return haystack.contains(_query.toLowerCase());
@@ -142,6 +143,7 @@ class _OpportunitiesPageState extends State<OpportunitiesPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
+                              '${opportunity.posterName != null ? '${opportunity.posterName} · ' : ''}'
                               '${_statusLabel(opportunity.status)} · ${_formatDate(opportunity.createdAt)}'
                               '${opportunity.capturedVia == 'radar' ? ' · radar' : ''}',
                               style: theme.textTheme.bodySmall?.copyWith(
@@ -192,6 +194,18 @@ String _formatDate(DateTime utc) {
   return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
 }
 
+String _initials(String name) {
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+  return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+      .toUpperCase();
+}
+
 /// Detail sheet: analysis, connection tracking, and ready-made outreach.
 /// The user performs every send; drafts are copied or handed to their apps.
 class _OpportunityDetail extends StatefulWidget {
@@ -214,6 +228,7 @@ class _OpportunityDetail extends StatefulWidget {
 class _OpportunityDetailState extends State<_OpportunityDetail> {
   String? _busyKind;
   String? _error;
+  bool _showProfile = false;
 
   Opportunity get _opportunity => widget.opportunity;
 
@@ -293,6 +308,79 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
             const SizedBox(height: 16),
             if (analysis.summary != null) ...[
               SelectableText(analysis.summary!),
+              const SizedBox(height: 16),
+            ],
+
+            // ---- Poster -------------------------------------------------
+            if (_opportunity.posterName != null) ...[
+              const SectionLabel('Posted by'),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: colors.primaryContainer,
+                    child: Text(
+                      _initials(_opportunity.posterName!),
+                      style: TextStyle(
+                        color: colors.onPrimaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _opportunity.posterName!,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        if (_opportunity.posterHeadline != null)
+                          Text(
+                            _opportunity.posterHeadline!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (_opportunity.posterProfile != null) ...[
+                const SizedBox(height: 4),
+                TextButton.icon(
+                  onPressed: () => setState(() => _showProfile = !_showProfile),
+                  icon: Icon(
+                    _showProfile
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.badge_outlined,
+                    size: 18,
+                  ),
+                  label: Text(
+                    _showProfile
+                        ? 'Hide full LinkedIn profile'
+                        : 'Show full LinkedIn profile (captured)',
+                  ),
+                ),
+                if (_showProfile)
+                  SurfaceCard(
+                    child: SelectableText(
+                      _opportunity.posterProfile!,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+              ],
+              const SizedBox(height: 16),
+            ],
+
+            // ---- Full captured post ---------------------------------------
+            if (_opportunity.text != null) ...[
+              const SectionLabel('Full LinkedIn post'),
+              const SizedBox(height: 8),
+              SelectableText(_opportunity.text!),
               const SizedBox(height: 16),
             ],
             Row(

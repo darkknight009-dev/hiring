@@ -327,6 +327,8 @@ class _RadarStatusCard extends StatefulWidget {
 class _RadarStatusCardState extends State<_RadarStatusCard> {
   Listenable? _listeningTo;
   bool? _radarEnabled;
+  bool _radarPaused = false;
+  bool _busy = false;
   int _capturedCount = 0;
 
   @override
@@ -351,7 +353,8 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
 
   void _onDepsChanged() {
     if (mounted) setState(() {});
-    _updateCount();
+    // Another page (or the radar itself) may have changed capture state.
+    _refresh();
   }
 
   Future<void> _updateCount() async {
@@ -362,10 +365,40 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
   }
 
   Future<void> _refresh() async {
-    final enabled = await AndroidBridge.isRadarEnabled();
+    final status = await Future.wait([
+      AndroidBridge.isRadarEnabled(),
+      AndroidBridge.isRadarPaused(),
+    ]);
     if (!mounted) return;
-    setState(() => _radarEnabled = enabled);
+    setState(() {
+      _radarEnabled = status[0];
+      _radarPaused = status[1];
+    });
     await _updateCount();
+  }
+
+  /// Pausing keeps the accessibility permission, so turning capture back on is
+  /// a single tap here — never a trip to system settings.
+  Future<void> _setPaused(bool paused) async {
+    setState(() => _busy = true);
+    if (paused) {
+      await AndroidBridge.pauseRadar();
+    } else {
+      await AndroidBridge.resumeRadar();
+    }
+    if (!mounted) return;
+    setState(() => _busy = false);
+    // Notifies every page so all radar controls show the same state.
+    widget.deps.dataChanged();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          paused
+              ? 'Capture stopped. Your accessibility access is kept, so one tap turns it back on.'
+              : 'Capture resumed. The radar is reading your feed again.',
+        ),
+      ),
+    );
   }
 
   @override
@@ -379,6 +412,7 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final enabled = _radarEnabled;
+    final capturing = enabled == true && !_radarPaused;
     return SurfaceCard(
       key: const Key('radar-status-card'),
       child: Column(
@@ -387,11 +421,9 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
           Row(
             children: [
               Icon(
-                Icons.radar_rounded,
+                capturing ? Icons.radar_rounded : Icons.radar_outlined,
                 size: 22,
-                color: enabled == true
-                    ? colors.primary
-                    : colors.onSurfaceVariant,
+                color: capturing ? colors.primary : colors.onSurfaceVariant,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -407,23 +439,21 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: enabled == true
+                  color: capturing
                       ? colors.primary.withValues(alpha: 0.12)
                       : colors.surfaceContainerHighest.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   switch (enabled) {
-                    true => 'ON',
+                    true => _radarPaused ? 'PAUSED' : 'ON',
                     false => 'OFF',
                     null => '···',
                   },
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
-                    color: enabled == true
-                        ? colors.primary
-                        : colors.onSurfaceVariant,
+                    color: capturing ? colors.primary : colors.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -432,7 +462,9 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
           const SizedBox(height: 8),
           Text(
             switch (enabled) {
-              true => 'Listening to your feed. Hiring posts are captured locally while you scroll.',
+              true => _radarPaused
+                  ? 'Paused by you. Nothing is being read. Tap Resume to start capturing again — your permission is still granted.'
+                  : 'Listening to your feed. Hiring posts are captured locally while you scroll.',
               false => 'Off. Enable it once in Accessibility settings and it watches your feed while you scroll.',
               null => 'Checking radar status…',
             },
@@ -467,6 +499,24 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
                   },
                   icon: const Icon(Icons.power_settings_new_rounded, size: 18),
                   label: const Text('Turn on'),
+                )
+              else if (_radarPaused)
+                FilledButton.tonalIcon(
+                  key: const Key('radar-resume-button'),
+                  onPressed: _busy ? null : () => _setPaused(false),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                  label: const Text('Resume capture'),
+                )
+              else
+                OutlinedButton.icon(
+                  key: const Key('radar-stop-button'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colors.error,
+                    side: BorderSide(color: colors.error),
+                  ),
+                  onPressed: _busy ? null : () => _setPaused(true),
+                  icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                  label: const Text('Stop capture'),
                 ),
               TextButton.icon(
                 onPressed: widget.onOpenOpportunities,

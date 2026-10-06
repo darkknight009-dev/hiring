@@ -28,7 +28,8 @@ class RadarAccessibilityService : AccessibilityService() {
     companion object {
         const val LINKEDIN_PACKAGE = "com.linkedin.android"
         const val MIN_POST_CHARS = 60
-        const val MAX_POST_CHARS = 4000
+        const val MAX_POST_CHARS = 8000
+        const val MAX_PROFILE_CHARS = 8000
         const val CHANNEL_STATUS = "hiring_radar_status"
         const val STATUS_NOTIFICATION_ID = 1002
         private const val MIN_EVENT_INTERVAL_MS = 1500L
@@ -47,10 +48,27 @@ class RadarAccessibilityService : AccessibilityService() {
         @Volatile
         var isEnabled: Boolean = false
 
-        /// User's job-preference keywords, pushed from Flutter. A post matching
-        /// any of these passes the gate even without a generic hiring keyword.
+        /// True when the user asked to stop capturing. The service stays
+        /// enabled — pausing never calls [disableSelf], so resuming needs no
+        /// new accessibility permission. Survives process death via prefs.
         @Volatile
-        var userKeywords: List<String> = emptyList()
+        var isPaused: Boolean = false
+            private set
+
+        /// User's job preferences, pushed from Flutter. When set, the gate
+        /// mirrors the Dart-side filter exactly: a post must mention one of
+        /// the roles AND (when locations are set) one of the locations.
+        /// Generic hiring keywords are only used when no preferences exist.
+        @Volatile
+        var userRoles: List<String> = emptyList()
+
+        @Volatile
+        var userLocations: List<String> = emptyList()
+
+        const val ACTION_PAUSE = "app.hiringradar.action.PAUSE_RADAR"
+        const val ACTION_RESUME = "app.hiringradar.action.RESUME_RADAR"
+        private const val PREFS_NAME = "radar_state"
+        private const val KEY_PAUSED = "paused"
 
         // ---- live status statistics (session-scoped, shown in the shade) ----
 
@@ -108,11 +126,34 @@ class RadarAccessibilityService : AccessibilityService() {
             filterMode = mode
             instance?.refreshStatus()
         }
+
+        /// Stops scanning without giving up accessibility access: the service
+        /// stays enabled, so resuming is instant and never sends the user back
+        /// to system settings. Used by the in-app control and the notification
+        /// action ([ACTION_PAUSE] / [ACTION_RESUME]).
+        fun pauseCapture() = setPaused(true)
+
+        fun resumeCapture() = setPaused(false)
+
+        private fun setPaused(paused: Boolean) {
+            isPaused = paused
+            val service = instance ?: return
+            service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_PAUSED, paused)
+                .apply()
+            service.refreshStatus()
+        }
     }
 
     private var lastEmitElapsedMs = 0L
     private val seenHashes = LinkedHashSet<Int>()
     private val observedHashes = LinkedHashSet<Int>()
+
+    /// True while a LinkedIn profile screen is the active window; set from
+    /// TYPE_WINDOW_STATE_CHANGED activity class names.
+    private var profileWindow = false
+    private var lastProfileHash = 0
 
     private val keywordGate = listOf(
         "hiring", "join our team", "join the team", "we are hiring", "we're hiring",
@@ -125,6 +166,10 @@ class RadarAccessibilityService : AccessibilityService() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // A pause set before the process died must not silently turn back into
+        // capturing when the service is recreated.
+        isPaused = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_PAUSED, false)
     }
 
     override fun onServiceConnected() {
@@ -142,8 +187,25 @@ class RadarAccessibilityService : AccessibilityService() {
         refreshStatus()
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_PAUSE -> pauseCapture()
+            ACTION_RESUME -> resumeCapture()
+        }
+        // The system binds this service; it must never be restarted on its own.
+        return START_NOT_STICKY
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null) return
+        if (event == null || isPaused) return
+        // Tracked before the throttle: a window change is the only signal that
+        // the user left (or entered) a profile screen, and dropping it would
+        // leave the flag stale for the rest of the session.
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val window = event.className?.toString() ?: ""
+            profileWindow = window.contains("profile", ignoreCase = true)
+        }
+
         val root: AccessibilityNodeInfo = rootInActiveWindow ?: return
         if (root.packageName?.toString() != LINKEDIN_PACKAGE) return
 
@@ -151,30 +213,38 @@ class RadarAccessibilityService : AccessibilityService() {
         if (now - lastEmitElapsedMs < MIN_EVENT_INTERVAL_MS) return
         lastEmitElapsedMs = now
 
-        val texts = ArrayList<String>()
-        collectTexts(root, texts, 0)
-        root.recycleCompat()
-        if (texts.isEmpty()) return
-
-        // Heuristic: the longest visible text blocks are post bodies.
-        val candidates = texts
-            .filter { it.length in MIN_POST_CHARS..MAX_POST_CHARS }
-            .sortedByDescending { it.length }
-            .take(4)
-
-        // Heuristic author: a short person-like line near the top of the feed.
-        val author = texts.firstOrNull {
-            it.length in 2..40 && !it.contains("http") && it.none { c -> c.isDigit() }
+        // When the user opens a poster's profile, capture the visible screen
+        // (read-only) so Flutter can attach the full profile to the matching
+        // saved opportunity. Feed-post scanning is skipped there: a profile
+        // page is not a feed card, and its activity list would be captured
+        // with the wrong poster.
+        if (profileWindow || hasProfileMarker(root)) {
+            captureProfileIfNew(root)
+            root.recycleCompat()
+            refreshStatus()
+            return
         }
 
-        for (text in candidates) {
+        // Post-sized own-text nodes anchor a post; each is expanded to its
+        // full card so the poster header, body and location lines stay
+        // together. A single body node often lacks the role/location keywords
+        // the user filters on, which made matching posts get skipped
+        // downstream.
+        val anchors = ArrayList<AccessibilityNodeInfo>()
+        collectAnchors(root, anchors, 0)
+        val candidates = anchors
+            .sortedByDescending { it.text?.toString()?.trim()?.length ?: 0 }
+            .take(4)
+
+        for (node in candidates) {
+            val card = cardNodeOf(node)
+            val text = cardText(card, StringBuilder(), 0).trim()
+            if (text.length !in MIN_POST_CHARS..MAX_POST_CHARS) continue
+
             // Count distinct posts viewed this session (first filter input).
             rememberObserved(text.hashCode())
 
-            val lower = text.lowercase()
-            val matched = keywordGate.any { lower.contains(it) } ||
-                userKeywords.any { kw -> kw.isNotBlank() && lower.contains(kw.lowercase()) }
-            if (!matched) continue
+            if (!passesGate(text.lowercase())) continue
             val hash = text.hashCode()
             if (!seenHashes.add(hash)) continue
             if (seenHashes.size > 300) {
@@ -182,14 +252,89 @@ class RadarAccessibilityService : AccessibilityService() {
                 repeat(100) { if (iterator.hasNext()) { iterator.next(); iterator.remove() } }
             }
             gatePassedPosts++
+
+            // Poster name and headline come from the card's own header lines,
+            // so every capture keeps the person who posted along with the
+            // full post text.
+            val lines = ArrayList<String>()
+            collectLines(card, lines, 0)
+            var authorIndex = -1
+            var author: String? = null
+            for (i in lines.indices) {
+                val name = personNameOf(lines[i])
+                if (name != null) {
+                    author = name
+                    authorIndex = i
+                    break
+                }
+            }
+            val headline = authorHeadline(lines, authorIndex)
             val payload = mapOf(
+                "kind" to "post",
                 "text" to text,
                 "author" to author,
+                "headline" to headline,
                 "url" to null as String?
             )
             deliver(payload)
         }
+        root.recycleCompat()
         refreshStatus()
+    }
+
+    /// Captures the visible profile screen once per distinct content while
+    /// the user views it. Flutter matches it to an opportunity by poster
+    /// name; a wrong guess here is harmless because the match happens there.
+    private fun captureProfileIfNew(root: AccessibilityNodeInfo) {
+        val lines = ArrayList<String>()
+        collectLines(root, lines, 0)
+        val text = lines.joinToString("\n")
+        if (text.length < 120) return // still loading, or not a real profile
+        val capped =
+            if (text.length > MAX_PROFILE_CHARS) text.substring(0, MAX_PROFILE_CHARS) else text
+        val hash = capped.hashCode()
+        if (hash == lastProfileHash) return
+        lastProfileHash = hash
+        deliver(mapOf("kind" to "profile", "text" to capped, "url" to null as String?))
+    }
+
+    /// Lines LinkedIn only renders on a profile screen. A second signal for
+    /// builds where the window class name does not contain "profile".
+    private val profileMarkers = setOf(
+        "contact info", "show all activity", "all activity", "open to"
+    )
+
+    private fun hasProfileMarker(root: AccessibilityNodeInfo): Boolean {
+        var budget = MAX_NODES
+        fun walk(node: AccessibilityNodeInfo?, depth: Int): Boolean {
+            if (node == null || depth > MAX_DEPTH || budget-- <= 0) return false
+            val line = node.text?.toString()?.trim()?.lowercase()
+            if (line != null && line in profileMarkers) return true
+            for (i in 0 until node.childCount) {
+                if (walk(node.getChild(i), depth + 1)) return true
+            }
+            return false
+        }
+        return walk(root, 0)
+    }
+
+    /// First-filter gate. With preferences set it mirrors the Dart-side
+    /// `matchesJobPreferences` exactly (roles AND locations, each an OR-list),
+    /// so "passed 1st filter" in the shade is no longer inflated by generic
+    /// hiring posts the second filter would reject anyway. Without
+    /// preferences the generic hiring keyword gate applies.
+    private fun passesGate(lower: String): Boolean {
+        val roles = userRoles
+        val locations = userLocations
+        if (roles.isNotEmpty() || locations.isNotEmpty()) {
+            fun anyMentioned(list: List<String>): Boolean {
+                val keywords = list.filter { it.isNotBlank() }
+                return keywords.isEmpty() ||
+                    keywords.any { lower.contains(it.lowercase()) }
+            }
+            return anyMentioned(roles) && anyMentioned(locations)
+        }
+        return keywordGate.any { lower.contains(it) }
     }
 
     /// Counts a distinct observed post once; bounds the dedupe set so long
@@ -220,15 +365,125 @@ class RadarAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun collectTexts(node: AccessibilityNodeInfo?, out: MutableList<String>, depth: Int) {
+    /// Every non-empty own-text line in document order, including the short
+    /// header lines (poster name, headline) that [cardText] skips.
+    private fun collectLines(node: AccessibilityNodeInfo?, out: MutableList<String>, depth: Int) {
         if (node == null || depth > MAX_DEPTH || out.size >= MAX_NODES) return
         val text = node.text?.toString()?.trim()
+        if (!text.isNullOrEmpty()) out.add(text)
+        for (i in 0 until node.childCount) {
+            collectLines(node.getChild(i), out, depth + 1)
+        }
+    }
+
+    /// LinkedIn's own chrome labels, which can look person-shaped to a
+    /// two-word heuristic ("Easy Apply", "View profile", …).
+    private val uiLabels = setOf(
+        "like", "comment", "repost", "send", "share", "follow", "following",
+        "connect", "subscribe", "see more", "…more", "...more", "show more",
+        "view translation", "open to", "promoted", "ad", "learn more",
+        "apply", "easy apply", "interested", "celebrate", "insightful",
+        "support", "curious", "more", "message", "home", "network", "jobs",
+        "messaging", "notifications", "search", "see all", "view all",
+        "mutual connections", "contact info", "show all activity"
+    )
+
+    private val timestampLine = Regex(
+        "^(just now|\\d+\\s*(s|min|mins|minute|minutes|h|hr|hrs|hour|hours|" +
+            "d|day|days|w|wk|week|weeks|m|mo|month|months|y|yr|year|years)s?\\b).*",
+        RegexOption.IGNORE_CASE
+    )
+
+    /// Extracts a person (or company page) name from a card header line:
+    /// short, word-like, no digits or URLs, not one of LinkedIn's labels.
+    /// Returns the name without a trailing "· 2nd" degree suffix, or null.
+    private fun personNameOf(line: String): String? {
+        val candidate = line.substringBefore('·').trim()
+        if (candidate.length !in 2..40) return null
+        if (candidate.contains("http")) return null
+        if (candidate.any { it.isDigit() }) return null
+        if (!candidate.any { it.isLetter() }) return null
+        val lower = candidate.lowercase()
+        if (lower in uiLabels || lower.startsWith("view ")) return null
+        val words = candidate.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.size < 2) return null
+        return candidate
+    }
+
+    /// The headline LinkedIn renders under the poster name and before the
+    /// post body. Timestamp and chrome lines are skipped; the scan stops at
+    /// the first body-sized line.
+    private fun authorHeadline(lines: List<String>, authorIndex: Int): String? {
+        if (authorIndex < 0) return null
+        for (i in authorIndex + 1 until lines.size) {
+            val line = lines[i]
+            if (line.length >= MIN_POST_CHARS) return null // reached the body
+            if (line.length !in 4..120) continue
+            val lower = line.lowercase()
+            if (lower in uiLabels || lower.startsWith("view ")) continue
+            if (timestampLine.matches(line)) continue
+            if (!line.any { it.isLetter() }) continue
+            return line
+        }
+        return null
+    }
+
+    /// Nodes whose own text is post-sized; each one anchors a post card.
+    private fun collectAnchors(
+        node: AccessibilityNodeInfo?,
+        out: MutableList<AccessibilityNodeInfo>,
+        depth: Int
+    ) {
+        if (node == null || depth > MAX_DEPTH || out.size >= MAX_NODES) return
+        val length = node.text?.toString()?.trim()?.length ?: 0
+        if (length in MIN_POST_CHARS..MAX_POST_CHARS) out.add(node)
+        for (i in 0 until node.childCount) {
+            collectAnchors(node.getChild(i), out, depth + 1)
+        }
+    }
+
+    /// Walks up from an anchor while the ancestor still looks like a single
+    /// post card: exactly one post-sized text block in its subtree and a
+    /// bounded total length. Returns the card node so the poster header lines
+    /// can be read from the same card as the body.
+    private fun cardNodeOf(anchor: AccessibilityNodeInfo): AccessibilityNodeInfo {
+        var current = anchor
+        var guard = 0
+        while (guard++ < MAX_DEPTH) {
+            val parent = current.parent ?: break
+            if (countLongTexts(parent, 0) > 1) break
+            if (cardText(parent, StringBuilder(), 0).length > MAX_POST_CHARS) break
+            current = parent
+        }
+        return current
+    }
+
+    /// Counts post-sized own-text nodes in a subtree; exits early at two.
+    private fun countLongTexts(node: AccessibilityNodeInfo?, depth: Int): Int {
+        if (node == null || depth > MAX_DEPTH) return 0
+        var count = 0
+        val length = node.text?.toString()?.trim()?.length ?: 0
+        if (length >= MIN_POST_CHARS) count++
+        for (i in 0 until node.childCount) {
+            count += countLongTexts(node.getChild(i), depth + 1)
+            if (count > 1) return count
+        }
+        return count
+    }
+
+    private fun cardText(node: AccessibilityNodeInfo?, out: StringBuilder, depth: Int): String {
+        if (node == null || depth > MAX_DEPTH || out.length > MAX_POST_CHARS) {
+            return out.toString()
+        }
+        val text = node.text?.toString()?.trim()
         if (!text.isNullOrEmpty() && text.length >= MIN_POST_CHARS / 4) {
-            out.add(text)
+            if (out.isNotEmpty()) out.append('\n')
+            out.append(text)
         }
         for (i in 0 until node.childCount) {
-            collectTexts(node.getChild(i), out, depth + 1)
+            cardText(node.getChild(i), out, depth + 1)
         }
+        return out.toString()
     }
 
     private fun AccessibilityNodeInfo.recycleCompat() {
@@ -270,8 +525,11 @@ class RadarAccessibilityService : AccessibilityService() {
         val aiFailed = stats["aiFailed"] ?: 0
         val saved = stats["saved"] ?: 0
 
+        val paused = isPaused
         val body = buildString {
-            if (observedPosts == 0) {
+            if (paused) {
+                append("Capture is paused — nothing is being read. Tap Resume to start again; your accessibility access is still granted.")
+            } else if (observedPosts == 0) {
                 append("Capturing is ON. Open LinkedIn and scroll — every post you pass is counted here live.")
             } else {
                 append("Posts seen: $observedPosts  ·  passed 1st filter: $gatePassedPosts\n")
@@ -283,14 +541,14 @@ class RadarAccessibilityService : AccessibilityService() {
                 append("AI: confirmed $aiHiring  ·  rejected $aiRejected  ·  failed $aiFailed\n")
                 append("Saved to your inbox: $saved")
             }
-            if (listener == null) {
+            if (!paused && listener == null) {
                 append("\nOpen the FeedRadar app so captured posts can be analyzed.")
             }
         }
-        val summary = if (observedPosts == 0) {
-            "Capturing is ON"
-        } else {
-            "Seen $observedPosts · saved $saved"
+        val summary = when {
+            paused -> "Paused"
+            observedPosts == 0 -> "Capturing is ON"
+            else -> "Seen $observedPosts · saved $saved"
         }
 
         val openApp = PendingIntent.getActivity(
@@ -300,15 +558,33 @@ class RadarAccessibilityService : AccessibilityService() {
                 ?.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        // One action that flips between pausing and resuming. Pausing never
+        // disables the service, so resuming needs no new permission.
+        val toggleCapture = PendingIntent.getService(
+            this,
+            2003,
+            Intent(this, RadarAccessibilityService::class.java)
+                .setAction(if (paused) ACTION_RESUME else ACTION_PAUSE),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val notification = NotificationCompat.Builder(this, CHANNEL_STATUS)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("FeedRadar radar is capturing")
+            .setContentTitle(
+                if (paused) "FeedRadar capture is paused"
+                else "FeedRadar radar is capturing"
+            )
             .setContentText(summary)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(openApp)
+            .addAction(
+                if (paused) android.R.drawable.ic_media_play
+                else android.R.drawable.ic_menu_close_clear_cancel,
+                if (paused) "Resume capture" else "Stop capture",
+                toggleCapture
+            )
             .build()
         manager.notify(STATUS_NOTIFICATION_ID, notification)
     }

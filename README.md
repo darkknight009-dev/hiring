@@ -117,16 +117,15 @@ python3 -m http.server 8080 --bind 127.0.0.1 --directory build/web
 
 Open `http://127.0.0.1:8080` in Brave. Press `q` in the Flutter terminal to stop a dev run.
 
-### Configure AI analysis
+### AI analysis (built in)
 
-1. Get a free API key: **Google Gemini** at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) or **NVIDIA** at [build.nvidia.com](https://build.nvidia.com) (no credit card).
-2. Open **Settings** in the app, choose the provider, paste the key, and save it.
-3. Optionally override the model (NVIDIA default: `meta/llama-3.3-70b-instruct`).
-4. Fill **Your profile** (name, headline, skills, tone) — drafts use only these facts.
-5. Optionally pick your **resume PDF** for email attachments.
-6. Set **Job preferences** — the radar then captures only posts mentioning your roles (and locations, if set).
+AI is built in — no API key to create or paste. Post analysis and outreach drafts run on NVIDIA NIM models (`nvidia/nemotron-3-super-120b-a12b` by default) with a key embedded in the app.
 
-The key is stored on your device only (browser localStorage / Android SharedPreferences) and is sent only to the provider with your analysis requests. Posts that the offline filter scores below the threshold skip AI entirely to save quota.
+1. Fill **Your profile** (name, headline, skills, tone) — drafts use only these facts.
+2. Optionally pick your **resume PDF** for email attachments.
+3. Set **Job preferences** — the radar then captures only posts mentioning your roles (and locations, if set).
+
+Note: an embedded key is extractable by anyone who has the APK; rotate it at build.nvidia.com if it is ever abused. Posts that the offline filter scores below the threshold skip AI entirely.
 
 ### Enable the background radar (Android)
 

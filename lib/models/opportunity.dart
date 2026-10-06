@@ -12,6 +12,7 @@ class PostAnalysis {
     this.location,
     this.applyInstructions,
     this.summary,
+    this.posterName,
   });
 
   factory PostAnalysis.fromJson(Map<String, dynamic> json) {
@@ -28,6 +29,7 @@ class PostAnalysis {
       location: readString(json['location']),
       applyInstructions: readString(json['applyInstructions']),
       summary: readString(json['summary']),
+      posterName: readString(json['posterName']),
     );
   }
 
@@ -42,6 +44,9 @@ class PostAnalysis {
   final String? applyInstructions;
   final String? summary;
 
+  /// Name of the person who posted, when visible in the post text.
+  final String? posterName;
+
   Map<String, dynamic> toJson() => {
     'isHiring': isHiring,
     'confidence': confidence,
@@ -50,5 +55,6 @@ class PostAnalysis {
     'location': location,
     'applyInstructions': applyInstructions,
     'summary': summary,
+    'posterName': posterName,
   };
 }

@@ -139,8 +139,11 @@ class SettingsStore {
     return true;
   }
 
-  List<String> _keywordList(String key) =>
-      List.unmodifiable(prefs.getStringList(key) ?? const <String>[]);
+  List<String> _keywordList(String key) => List.unmodifiable(
+    (prefs.getStringList(key) ?? const <String>[])
+        .map((entry) => entry.trim())
+        .where((entry) => entry.isNotEmpty),
+  );
 
   static List<String> _cleanKeywords(List<String> value) => value
       .map((entry) => entry.trim())

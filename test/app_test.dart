@@ -9,7 +9,11 @@ import 'package:hiring/app_dependencies.dart';
 import 'package:hiring/core/theme/app_theme.dart';
 import 'package:hiring/features/analyze/analyze_page.dart';
 import 'package:hiring/models/captured_post.dart';
+import 'package:hiring/models/opportunity.dart';
+import 'package:hiring/models/outreach.dart';
+import 'package:hiring/services/analysis/ai_provider.dart';
 import 'package:hiring/services/capture/capture_provider.dart';
+import 'package:hiring/widgets/splash_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void setViewport(WidgetTester tester, Size size) {
@@ -25,13 +29,16 @@ Future<AppDependencies> makeDeps({
   // Existing tests exercise the main workspace, not first launch.
   SharedPreferences.setMockInitialValues({'onboarding.done': true, ...values});
   final prefs = await SharedPreferences.getInstance();
-  return AppDependencies(prefs: prefs);
+  // AI is built in with a real key; tests must never hit the network.
+  return AppDependencies(prefs: prefs, aiOverride: _FakeAi());
 }
 
 Widget wrap(Widget child, AppDependencies deps) =>
     AppDependenciesScope(deps: deps, child: child);
 
 Future<void> openCapture(WidgetTester tester) async {
+  // The launch splash is finite, so settling always lands on the workspace.
+  await tester.pumpAndSettle();
   await tester.ensureVisible(find.text('Analyze LinkedIn Post'));
   await tester.tap(find.text('Analyze LinkedIn Post'));
   await tester.pumpAndSettle();
@@ -45,6 +52,23 @@ Future<void> preview(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('launch plays the radar splash before the workspace', (
+    tester,
+  ) async {
+    setViewport(tester, const Size(390, 844));
+    final deps = await makeDeps();
+    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
+    await tester.pump();
+    expect(find.byKey(const Key('splash-wordmark')), findsOneWidget);
+    expect(find.text('Never miss a hiring post.'), findsNothing);
+
+    await tester.pump(SplashPage.duration);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('splash-wordmark')), findsNothing);
+    expect(find.text('Never miss a hiring post.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final size in [
     const Size(320, 720),
     const Size(390, 844),
@@ -158,15 +182,16 @@ void main() {
       "We are hiring a Senior Flutter engineer at Example Studio in Berlin. DM me your resume to apply.",
     );
     await preview(tester);
-    // No AI key: the offline path must complete without AI analysis.
-    expect(find.text('Capture preview · not analyzed'), findsOneWidget);
-    expect(find.textContaining('No AI key configured'), findsOneWidget);
+    // The built-in AI (faked here) analyzes every hiring-looking post.
+    expect(find.text('Analysis result'), findsOneWidget);
+    expect(find.textContaining('Analyzed with fake-model'), findsOneWidget);
     await tester.ensureVisible(find.text('Save to my inbox'));
     await tester.tap(find.text('Save to my inbox'));
     await tester.pumpAndSettle();
     final saved = await deps.repository.loadAll();
     expect(saved, hasLength(1));
-    expect(saved.first.analysis.isHiring, isFalse);
+    expect(saved.first.analysis.isHiring, isTrue);
+    expect(saved.first.analysis.role, 'Flutter Engineer');
     expect(saved.first.text, contains('We are hiring'));
 
     await tester.tap(find.text('Overview'));
@@ -205,30 +230,19 @@ void main() {
       "We are hiring a React developer at Example Studio. DM me your resume.",
     );
     await preview(tester);
-    expect(find.text('Capture preview · not analyzed'), findsOneWidget);
+    expect(find.text('Analysis result'), findsOneWidget);
+    expect(find.text('EXTRACTED DETAILS'), findsOneWidget);
+    expect(find.text('Looks like a hiring post'), findsOneWidget);
+    expect(find.text('Flutter Engineer'), findsOneWidget);
+    expect(find.text('Acme'), findsOneWidget);
     expect(find.text('Save to my inbox'), findsOneWidget);
     await tester.ensureVisible(find.text('Save to my inbox'));
     await tester.tap(find.text('Save to my inbox'));
     await tester.pumpAndSettle();
     final saved = await deps.repository.loadAll();
     expect(saved, hasLength(1));
-    expect(saved.first.analysis.isHiring, isFalse);
-  });
-
-  testWidgets('settings page stores the API key locally', (tester) async {
-    setViewport(tester, const Size(1200, 1000));
-    final deps = await makeDeps();
-    await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
-    await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('api-key-field')),
-      'test-key-123',
-    );
-    await tester.tap(find.byKey(const Key('save-key-button')));
-    await tester.pumpAndSettle();
-    expect(deps.settings.apiKey, 'test-key-123');
-    expect(deps.hasAiKey, isTrue);
+    expect(saved.first.analysis.isHiring, isTrue);
+    expect(saved.first.analysis.company, 'Acme');
   });
 
   testWidgets('first launch shows onboarding and preferences reach the radar', (
@@ -245,18 +259,34 @@ void main() {
     await tester.tap(find.text('Get started'));
     await tester.pumpAndSettle();
 
-    // Step 2: profile.
+    // Step 2: profile. The forward button stays disabled until a name is
+    // entered, so let the validation rebuild land before tapping.
+    expect(find.text('Add your name to continue.'), findsOneWidget);
     await tester.enterText(find.byType(TextFormField).first, 'Test User');
+    await tester.pump();
+    expect(find.text('Add your name to continue.'), findsNothing);
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    // Step 3: preferences.
+    // Step 3: preferences. Blocked until at least one keyword exists.
+    expect(
+      find.text(
+        'Add at least one role or location so your radar knows what to catch.',
+      ),
+      findsOneWidget,
+    );
     final rolesField = find.descendant(
       of: find.byKey(const Key('keyword-field-Roles or keywords')),
       matching: find.byType(TextFormField),
     );
     await tester.enterText(rolesField, 'Flutter developer,');
     await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Add at least one role or location so your radar knows what to catch.',
+      ),
+      findsNothing,
+    );
 
     await tester.tap(find.text('Tune my radar'));
     await tester.pump(); // finishing state with the radar loader
@@ -362,6 +392,64 @@ void main() {
   });
 
   testWidgets(
+    'capture stops and resumes in-app without asking for permission again',
+    (tester) async {
+      setViewport(tester, const Size(390, 1600));
+      final deps = await makeDeps();
+      var paused = false;
+      final calls = <String>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('app.hiringradar/share'),
+            (call) async {
+              calls.add(call.method);
+              switch (call.method) {
+                case 'isRadarEnabled':
+                  return true;
+                case 'isRadarPaused':
+                  return paused;
+                case 'pauseRadar':
+                  paused = true;
+                  return null;
+                case 'resumeRadar':
+                  paused = false;
+                  return null;
+              }
+              return null;
+            },
+          );
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              const MethodChannel('app.hiringradar/share'),
+              null,
+            );
+      });
+
+      await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
+      await tester.pumpAndSettle();
+      expect(find.text('ON'), findsOneWidget);
+
+      await tester.ensureVisible(find.byKey(const Key('radar-stop-button')));
+      await tester.tap(find.byKey(const Key('radar-stop-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('PAUSED'), findsOneWidget);
+      expect(calls, contains('pauseRadar'));
+      // Stopping keeps the accessibility grant, so it never routes the user
+      // through system settings.
+      expect(calls, isNot(contains('openAccessibilitySettings')));
+
+      await tester.ensureVisible(find.byKey(const Key('radar-resume-button')));
+      await tester.tap(find.byKey(const Key('radar-resume-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('ON'), findsOneWidget);
+      expect(calls, contains('resumeRadar'));
+      expect(calls, isNot(contains('openAccessibilitySettings')));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'share arriving while the app is open lands in the capture form',
     (tester) async {
       setViewport(tester, const Size(390, 844));
@@ -391,4 +479,36 @@ class _PendingCapture implements CaptureProvider {
 
   @override
   Future<CapturedPost?> capturePost() => result.future;
+}
+
+/// Deterministic stand-in for the built-in NVIDIA provider so widget tests
+/// never make network calls with the embedded key.
+class _FakeAi implements AiProvider {
+  @override
+  Future<AnalysisResult> analyzePost({required String text, Uri? url}) async =>
+      AnalysisResult(
+        analysis: const PostAnalysis(
+          isHiring: true,
+          confidence: 90,
+          role: 'Flutter Engineer',
+          company: 'Acme',
+          summary: 'Fake analysis.',
+        ),
+        modelUsed: 'fake-model',
+      );
+
+  @override
+  Future<OutreachDraft> generateDraft({
+    required String kind,
+    required String postText,
+    String? posterName,
+    String? role,
+    String? company,
+    required UserProfile profile,
+  }) async => OutreachDraft(
+    kind: kind,
+    subject: 'Fake subject',
+    body: 'Fake draft body.',
+    createdAt: DateTime.now().toUtc(),
+  );
 }

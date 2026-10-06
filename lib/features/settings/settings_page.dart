@@ -3,13 +3,12 @@ import 'package:flutter/material.dart';
 import '../../app_dependencies.dart';
 import '../../services/platform/android_bridge.dart';
 import '../../services/resume/resume_store.dart';
-import '../../services/settings/settings_store.dart';
 import '../../widgets/keyword_field.dart';
 import '../../widgets/page_content.dart';
 import '../../widgets/surface_card.dart';
 
-/// User-managed AI configuration. The API key never leaves the device except
-/// in requests to the chosen provider.
+/// App settings. AI analysis is built in (NVIDIA NIM with an embedded key),
+/// so there is no key management here.
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.deps});
 
@@ -20,39 +19,49 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final _apiKeyController = TextEditingController();
-  final _modelController = TextEditingController();
   final _nameController = TextEditingController();
   final _headlineController = TextEditingController();
   final _skillsController = TextEditingController();
   late List<String> _roles = [...widget.deps.settings.preferredRoles];
   late List<String> _locations = [...widget.deps.settings.preferredLocations];
-  bool _obscureKey = true;
   bool _radarEnabled = false;
+  bool _radarPaused = false;
+  bool _radarBusy = false;
   String? _resumePath;
 
   @override
   void initState() {
     super.initState();
     final settings = widget.deps.settings;
-    _apiKeyController.text = settings.apiKey ?? '';
-    _modelController.text = settings.model;
     _nameController.text = settings.profileName;
     _headlineController.text = settings.profileHeadline;
     _skillsController.text = settings.profileSkills;
     _resumePath = settings.resumePath;
+    widget.deps.addListener(_onDepsChanged);
     _refreshRadarStatus();
   }
 
+  /// Capture can be paused from the dashboard or the notification, so this
+  /// page re-reads the native state whenever anything changes.
+  void _onDepsChanged() {
+    if (mounted) _refreshRadarStatus();
+  }
+
   Future<void> _refreshRadarStatus() async {
-    final enabled = await AndroidBridge.isRadarEnabled();
-    if (mounted) setState(() => _radarEnabled = enabled);
+    final status = await Future.wait([
+      AndroidBridge.isRadarEnabled(),
+      AndroidBridge.isRadarPaused(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _radarEnabled = status[0];
+      _radarPaused = status[1];
+    });
   }
 
   @override
   void dispose() {
-    _apiKeyController.dispose();
-    _modelController.dispose();
+    widget.deps.removeListener(_onDepsChanged);
     _nameController.dispose();
     _headlineController.dispose();
     _skillsController.dispose();
@@ -73,7 +82,7 @@ class _SettingsPageState extends State<SettingsPage> {
           Text('Settings', style: theme.textTheme.headlineLarge),
           const SizedBox(height: 12),
           Text(
-            'Your key stays on this device and is used only for your own analysis requests.',
+            'Your data stays on this device. AI analysis is built in — no keys, no setup.',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colors.onSurfaceVariant,
             ),
@@ -86,125 +95,15 @@ class _SettingsPageState extends State<SettingsPage> {
                 Text('AI analysis', style: theme.textTheme.titleLarge),
                 const SizedBox(height: 8),
                 Text(
-                  switch (settings.provider) {
-                    AiProviderKind.gemini => 'Get a free Gemini API key at aistudio.google.com/apikey and paste it below.',
-                    AiProviderKind.nvidia => 'Get a free NVIDIA API key at build.nvidia.com and paste it below. Any chat model from their catalog works, e.g. meta/llama-3.3-70b-instruct.',
-                    AiProviderKind.openRouter =>
-                      'Bring an OpenRouter key from openrouter.ai/keys.',
-                  },
+                  'Post analysis and outreach drafts are built in and run on NVIDIA NIM models. There is nothing to configure and no API key to manage.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 20),
-                DropdownButtonFormField<AiProviderKind>(
-                  initialValue: settings.provider,
-                  decoration: const InputDecoration(
-                    labelText: 'Provider',
-                    prefixIcon: Icon(Icons.auto_awesome, size: 21),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: AiProviderKind.gemini,
-                      child: Text('Google Gemini (free tier)'),
-                    ),
-                    DropdownMenuItem(
-                      value: AiProviderKind.nvidia,
-                      child: Text('NVIDIA NIM (build.nvidia.com)'),
-                    ),
-                    DropdownMenuItem(
-                      value: AiProviderKind.openRouter,
-                      child: Text('OpenRouter (bring your own key)'),
-                    ),
-                  ],
-                  onChanged: (value) async {
-                    if (value == null) return;
-                    await settings.setProvider(value);
-                    setState(() {});
-                  },
-                ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  key: const Key('api-key-field'),
-                  controller: _apiKeyController,
-                  obscureText: _obscureKey,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: InputDecoration(
-                    labelText: 'API key',
-                    hintText: switch (settings.provider) {
-                      AiProviderKind.gemini => 'AIza…',
-                      AiProviderKind.nvidia => 'nvapi-…',
-                      AiProviderKind.openRouter => 'sk-or-…',
-                    },
-                    prefixIcon: const Icon(Icons.key_rounded, size: 21),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscureKey
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                        size: 20,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscureKey = !_obscureKey),
-                    ),
-                  ),
-                  onFieldSubmitted: _saveKey,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  key: const Key('model-field'),
-                  controller: _modelController,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: InputDecoration(
-                    labelText: 'Model (optional)',
-                    hintText: switch (settings.provider) {
-                      AiProviderKind.gemini => 'gemini-2.0-flash',
-                      AiProviderKind.nvidia => 'meta/llama-3.3-70b-instruct',
-                      AiProviderKind.openRouter => 'openrouter/model-id',
-                    },
-                    helperText:
-                        'Leave empty to use the provider\'s default model.',
-                    prefixIcon: const Icon(Icons.memory_rounded, size: 21),
-                  ),
-                  onFieldSubmitted: _saveModel,
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  children: [
-                    FilledButton.icon(
-                      key: const Key('save-key-button'),
-                      onPressed: () => _saveKey(_apiKeyController.text),
-                      icon: const Icon(Icons.save_outlined, size: 18),
-                      label: const Text('Save key'),
-                    ),
-                    const SizedBox(width: 12),
-                    OutlinedButton(
-                      key: const Key('save-model-button'),
-                      onPressed: () => _saveModel(_modelController.text),
-                      child: const Text('Save model'),
-                    ),
-                    const SizedBox(width: 12),
-                    TextButton(
-                      onPressed: () async {
-                        _apiKeyController.clear();
-                        await _saveKey('');
-                      },
-                      child: const Text('Remove key'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Notice(
+                const SizedBox(height: 12),
+                const Notice(
                   icon: Icons.shield_outlined,
-                  text: widget.deps.hasAiKey
-                      ? 'A key is stored on this device. Requests go directly to ${switch (settings.provider) {
-                          AiProviderKind.gemini => 'Google',
-                          AiProviderKind.nvidia => 'NVIDIA',
-                          AiProviderKind.openRouter => 'OpenRouter',
-                        }} from your browser or app.'
-                      : 'No key stored yet. Analysis will run with the offline filter only.',
+                  text: 'Requests go directly from this device to NVIDIA. Your opportunities, profile, and resume never leave the device otherwise.',
                 ),
               ],
             ),
@@ -316,10 +215,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                     Icon(
-                      _radarEnabled
+                      _radarEnabled && !_radarPaused
                           ? Icons.radar_rounded
                           : Icons.radar_outlined,
-                      color: _radarEnabled
+                      color: _radarEnabled && !_radarPaused
                           ? colors.primary
                           : colors.onSurfaceVariant,
                       size: 22,
@@ -328,9 +227,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _radarEnabled
-                      ? 'The radar is on. While you scroll LinkedIn, hiring posts are captured locally.'
-                      : 'The radar reads visible LinkedIn posts while you scroll and captures hiring posts locally. Enable it in Accessibility settings.',
+                  !_radarEnabled
+                      ? 'The radar reads visible LinkedIn posts while you scroll and captures hiring posts locally. Enable it in Accessibility settings.'
+                      : _radarPaused
+                      ? 'Paused. Stopping never revokes accessibility access, so resuming is one tap — no system settings, no new permission.'
+                      : 'The radar is on. While you scroll LinkedIn, hiring posts are captured locally.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
@@ -361,6 +262,24 @@ class _SettingsPageState extends State<SettingsPage> {
                           AndroidBridge.requestNotificationPermission(),
                       child: const Text('Allow notifications'),
                     ),
+                    if (_radarEnabled && _radarPaused)
+                      FilledButton.tonalIcon(
+                        key: const Key('resume-radar-button'),
+                        onPressed: _radarBusy ? null : () => _setPaused(false),
+                        icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                        label: const Text('Resume capture'),
+                      )
+                    else if (_radarEnabled)
+                      OutlinedButton.icon(
+                        key: const Key('stop-radar-button'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: colors.error,
+                          side: BorderSide(color: colors.error),
+                        ),
+                        onPressed: _radarBusy ? null : () => _setPaused(true),
+                        icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                        label: const Text('Stop capture'),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -551,32 +470,32 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _saveModel(String value) async {
-    await widget.deps.settings.setModel(value.trim());
-    if (!mounted) return;
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Model saved. New requests use it.')),
-    );
-  }
-
   Future<void> _saveJobPreferences() async {
     final settings = widget.deps.settings;
     await settings.setPreferredRoles(_roles);
     await settings.setPreferredLocations(_locations);
-    await AndroidBridge.updateRadarKeywords([..._roles, ..._locations]);
+    await AndroidBridge.updateRadarKeywords(roles: _roles, locations: _locations);
   }
 
-  Future<void> _saveKey(String value) async {
-    await widget.deps.settings.setApiKey(value.trim());
+  /// Pauses or resumes capture. Pausing leaves the accessibility service
+  /// enabled, so resuming is instant and never asks for permission again.
+  Future<void> _setPaused(bool paused) async {
+    setState(() => _radarBusy = true);
+    if (paused) {
+      await AndroidBridge.pauseRadar();
+    } else {
+      await AndroidBridge.resumeRadar();
+    }
     if (!mounted) return;
-    setState(() {});
+    setState(() => _radarBusy = false);
+    // Every page shows radar state; this keeps them in sync.
+    widget.deps.dataChanged();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          value.trim().isEmpty
-              ? 'API key removed.'
-              : 'API key saved on this device.',
+          paused
+              ? 'Capture stopped. One tap resumes it — no permission needed.'
+              : 'Capture resumed. The radar is reading your feed again.',
         ),
       ),
     );
