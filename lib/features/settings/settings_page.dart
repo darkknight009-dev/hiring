@@ -347,6 +347,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     FilledButton.tonalIcon(
                       onPressed: () async {
+                        await AndroidBridge.requestNotificationPermission();
                         await AndroidBridge.openAccessibilitySettings();
                       },
                       icon: const Icon(

@@ -459,6 +459,9 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
                 FilledButton.tonalIcon(
                   key: const Key('radar-enable-button'),
                   onPressed: () async {
+                    // Android 13+: notifications need runtime permission,
+                    // otherwise capture alerts never reach the shade.
+                    await AndroidBridge.requestNotificationPermission();
                     await AndroidBridge.openAccessibilitySettings();
                     if (mounted) _refresh();
                   },

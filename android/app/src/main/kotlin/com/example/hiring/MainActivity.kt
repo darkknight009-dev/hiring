@@ -83,6 +83,17 @@ class MainActivity : FlutterActivity() {
                     RadarAccessibilityService.userKeywords = keywords
                     result.success(null)
                 }
+                "updateRadarStats" -> {
+                    val args = call.arguments as? Map<*, *>
+                    val raw = (args?.get("stats") as? Map<*, *>).orEmpty()
+                    val stats = HashMap<String, Int>()
+                    for ((key, value) in raw) {
+                        stats[key.toString()] = (value as? Number)?.toInt() ?: 0
+                    }
+                    val mode = (args?.get("mode") as? String) ?: "score"
+                    RadarAccessibilityService.applyFlutterStats(stats, mode)
+                    result.success(null)
+                }
                 "openEmail" -> {
                     val args = call.arguments as? Map<*, *>
                     openEmail(
@@ -98,7 +109,8 @@ class MainActivity : FlutterActivity() {
         }
 
         // Bridge radar captures from the accessibility service to Flutter.
-        RadarAccessibilityService.onPostCaptured = { payload ->
+        // Posts captured while no engine was listening are flushed here too.
+        RadarAccessibilityService.attach { payload ->
             runOnUiThread {
                 shareChannel.invokeMethod("onRadarPost", payload)
             }

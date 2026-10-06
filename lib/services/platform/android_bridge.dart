@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 
 import '../../models/captured_post.dart';
@@ -96,6 +96,21 @@ class AndroidBridge {
   /// pre-filter admits posts the user actually cares about.
   static Future<void> updateRadarKeywords(List<String> keywords) =>
       _call<void>('updateRadarKeywords', {'keywords': keywords});
+
+  /// Test-only: pushes a post into [radarPosts] as if the native service had
+  /// observed it. Never called in production code.
+  @visibleForTesting
+  static void debugEmitRadarPost(String text, {String? author}) {
+    final post = RadarPost(text: text, author: author);
+    _radarPosts.add(post);
+  }
+
+  /// Pushes the Flutter-side pipeline counters (second filter, AI verdicts,
+  /// saves) so the native status notification shows them in realtime.
+  static Future<void> updateRadarStats(
+    Map<String, int> stats, {
+    String mode = 'score',
+  }) => _call<void>('updateRadarStats', {'stats': stats, 'mode': mode});
 
   static Future<void> openEmail({
     required String to,
