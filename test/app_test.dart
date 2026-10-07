@@ -13,6 +13,8 @@ import 'package:hiring/models/opportunity.dart';
 import 'package:hiring/models/outreach.dart';
 import 'package:hiring/services/analysis/ai_provider.dart';
 import 'package:hiring/services/capture/capture_provider.dart';
+import 'package:hiring/services/platform/android_bridge.dart';
+import 'package:hiring/services/radar/radar_capture.dart';
 import 'package:hiring/widgets/splash_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -445,6 +447,58 @@ void main() {
       expect(find.text('ON'), findsOneWidget);
       expect(calls, contains('resumeRadar'));
       expect(calls, isNot(contains('openAccessibilitySettings')));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'a capture toggle made outside the app still updates the screen',
+    (tester) async {
+      setViewport(tester, const Size(390, 1600));
+      final deps = await makeDeps();
+      var paused = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            const MethodChannel('app.hiringradar/share'),
+            (call) async {
+              switch (call.method) {
+                case 'isRadarEnabled':
+                  return true;
+                case 'isRadarPaused':
+                  return paused;
+              }
+              return null;
+            },
+          );
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              const MethodChannel('app.hiringradar/share'),
+              null,
+            );
+      });
+      // Mirrors main.dart: the pipeline owns the native-to-UI relay.
+      RadarCapture(deps).start();
+
+      await tester.pumpWidget(wrap(HiringRadarApp(deps: deps), deps));
+      await tester.pumpAndSettle();
+      expect(find.text('ON'), findsOneWidget);
+
+      // The user taps "Stop capture" in the notification shade. Nothing in the
+      // widget tree is touched: native pushes the change and the screen must
+      // follow, otherwise it keeps claiming capture is on.
+      paused = true;
+      AndroidBridge.debugEmitRadarState(enabled: true, paused: true);
+      await tester.pumpAndSettle();
+      expect(find.text('PAUSED'), findsOneWidget);
+      expect(find.text('ON'), findsNothing);
+
+      // Resuming from the shade syncs back the same way.
+      paused = false;
+      AndroidBridge.debugEmitRadarState(enabled: true, paused: false);
+      await tester.pumpAndSettle();
+      expect(find.text('ON'), findsOneWidget);
+      expect(find.text('PAUSED'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

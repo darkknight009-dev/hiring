@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 
 import '../../models/opportunity.dart';
@@ -31,9 +32,7 @@ class NvidiaAiProvider implements AiProvider {
   /// share text into the app). Cap its length and neutralize the delimiter
   /// so it cannot break out of its quoted block and smuggle instructions.
   static String untrusted(String text) {
-    final capped = text.length > 12000
-        ? '${text.substring(0, 12000)}…'
-        : text;
+    final capped = text.length > 12000 ? '${text.substring(0, 12000)}…' : text;
     return capped.replaceAll('"""', "'''");
   }
 
@@ -104,7 +103,9 @@ class NvidiaAiProvider implements AiProvider {
       'email' =>
         'Write a job application email. Return {"subject": ..., "body": ...}. '
             'The subject is at most 70 characters and names the role. The body is '
-            '150-250 words: greet the poster by name, reference the exact post, '
+            '150-250 words: greet the poster using the poster name above, or a '
+            'neutral greeting when there is none — never greet the sender, '
+            'reference the exact post, '
             'show fit in two short paragraphs using only the profile facts, mention '
             'the attached resume, and end with availability and a polite close '
             'signed with the sender name.',
@@ -133,18 +134,30 @@ class NvidiaAiProvider implements AiProvider {
           'You write concise, specific outreach drafts for a job seeker based '
           'only on facts provided. Never fabricate experience, names, or '
           'companies.$_untrustedClause',
-      maxTokens: 3000,
+      // Reasoning length varies wildly for the same prompt (measured 267 to
+      // 1776 tokens), and it shares this budget with the answer. max_tokens is
+      // a cap rather than a reservation, so the headroom costs nothing.
+      maxTokens: 4096,
     );
-    final body = (parsed['body'] as String?)?.trim() ?? '';
-    if (body.isEmpty) {
+    final body = _readString(parsed['body']);
+    if (body == null) {
       throw const AiAnalysisException('AI returned an empty draft. Try again.');
     }
     return OutreachDraft(
       kind: kind,
-      subject: (parsed['subject'] as String?)?.trim(),
+      subject: _readString(parsed['subject']),
       body: body,
       createdAt: DateTime.now().toUtc(),
     );
+  }
+
+  /// The model occasionally returns a non-string (number, list) where prose is
+  /// expected; an unchecked cast would escape as a TypeError, which no caller
+  /// catches, leaving the UI silently stuck.
+  static String? _readString(Object? value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   Future<Map<String, dynamic>> _generateJson({
@@ -170,6 +183,12 @@ class NvidiaAiProvider implements AiProvider {
               ],
               'temperature': 0.4,
               'max_tokens': maxTokens,
+              // Nemotron-3 bills its reasoning tokens against max_tokens: at the
+              // default effort an email draft spent all 3000 thinking and came
+              // back with content: null. Low effort answers in ~250. A top-level
+              // `reasoning_effort` is silently ignored by NIM, and adding
+              // `response_format` quadruples the reasoning — so neither is used.
+              'reasoning': {'effort': 'low'},
             }),
           )
           .timeout(const Duration(seconds: 60));
@@ -177,10 +196,15 @@ class NvidiaAiProvider implements AiProvider {
       throw const AiAnalysisException(
         'The AI request timed out. Check your connection and try again.',
       );
-    } catch (_) {
+    } catch (error) {
+      debugPrint('NVIDIA request failed: $error');
       throw const AiAnalysisException(
         'Could not reach NVIDIA. Check your connection and try again.',
       );
+    }
+
+    if (response.statusCode != 200) {
+      debugPrint('NVIDIA HTTP ${response.statusCode}: ${response.body}');
     }
 
     if (response.statusCode == 401 || response.statusCode == 403) {
@@ -216,18 +240,24 @@ class NvidiaAiProvider implements AiProvider {
     }
 
     final choices = body['choices'];
-    final content = choices is List && choices.isNotEmpty
-        ? (choices.first as Map)['message'] is Map
-              ? ((choices.first as Map)['message'] as Map)['content']
-              : null
+    final choice = choices is List && choices.isNotEmpty
+        ? choices.first as Map
         : null;
+    final message = choice?['message'];
+    final content = message is Map ? message['content'] : null;
     if (content is! String || content.trim().isEmpty) {
+      if (choice?['finish_reason'] == 'length') {
+        throw const AiAnalysisException(
+          'The AI ran out of room before it wrote the answer. Try again.',
+        );
+      }
       throw const AiAnalysisException('NVIDIA returned no answer. Try again.');
     }
 
     try {
       return _decodeJsonObject(content);
     } catch (_) {
+      debugPrint('NVIDIA returned unparseable JSON: $content');
       throw const AiAnalysisException(
         'NVIDIA returned an answer that could not be parsed. Try again.',
       );

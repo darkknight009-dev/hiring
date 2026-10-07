@@ -19,7 +19,8 @@
   - *Email posts* → it crafts a subject + body and can open your email app with everything pre-filled and your stored resume PDF attached.
   - Every draft is copyable and regenerable; the AI may only use facts from your profile card and the post itself.
 - **Background radar (Android):** a read-only Accessibility Service observes visible LinkedIn text while you scroll, gates it with the offline filter **and your job preferences**, analyzes, saves, and sends a local notification. No clicks, no typing, no sends, no data leaving the device.
-- Settings: provider (Gemini/NVIDIA/OpenRouter), API key, model override, filter threshold, reminder interval, job preferences (synced with the radar), profile card (name/headline/skills/tone), resume PDF.
+- **Capture state stays in sync both ways:** stopping or resuming from the notification shade updates the app the moment you return to it, and stopping or resuming in the app updates the shade. The status card, Settings, and the ongoing notification always agree — including after you grant or revoke accessibility in system settings.
+- Settings: filter threshold, reminder interval, job preferences (synced with the radar), profile card (name/headline/skills/tone), resume PDF. AI itself is built in — no provider or key to manage.
 - Branded web manifest, maskable icons, favicon, and matching Android launcher icons.
 
 **Not yet implemented:** auto-sending (deliberately), company research, backend sync, authentication, and the full offline/install PWA milestone. AI runs directly from the device to the provider; there is no server in the middle.
@@ -159,7 +160,7 @@ flutter analyze
 flutter test
 ```
 
-50 tests cover: capture validation boundaries and hostile URLs (including lnkd.in short-link acceptance and look-alike host rejection); the offline filter on the four spec examples; analysis parsing with unknowns-as-null; DM/email scenario detection; connection-state transitions and draft serialization (including legacy records); repository round-trip and status updates; settings persistence including profile/resume/reminders and job-preference gating; the NVIDIA provider contract (payload, rejected key, fenced JSON); the full onboarding flow including preference persistence; the dashboard radar status card (ON state, capture count, enable CTA); mid-session share delivery into the capture form; responsive layouts at 320/390/768/1440 px; 200% text scaling; theme toggling; save/count flows; AI-missing honesty; and recoverable capture failures.
+66 tests cover: capture validation boundaries and hostile URLs (including lnkd.in short-link acceptance and look-alike host rejection); the offline filter on the four spec examples; analysis parsing with unknowns-as-null; DM/email scenario detection; connection-state transitions and draft serialization (including legacy records); repository round-trip and status updates; settings persistence including profile/resume/reminders and job-preference gating; the NVIDIA provider contract (payload, rejected key, fenced JSON) plus the reasoning-token cap in the request, an exhausted output budget, a non-string draft body, and prose returned instead of JSON; poster-name forwarding into drafts; the full onboarding flow including preference persistence; the dashboard radar status card (ON state, capture count, enable CTA); a capture toggle made outside the app (notification shade) reaching the dashboard; mid-session share delivery into the capture form; responsive layouts at 320/390/768/1440 px; 200% text scaling; theme toggling; save/count flows; AI-missing honesty; and recoverable capture failures.
 
 The accessibility service, notifications, and alarms are exercised on-device only; keep that in mind when testing on a real phone.
 
@@ -182,6 +183,6 @@ The accessibility service, notifications, and alarms are exercised on-device onl
 - The offline filter is intentionally conservative; some hiring posts may skip AI (lower the threshold in Settings). Job preferences are strict by design: a post must mention your roles (and locations, if set) or it is skipped.
 - With job preferences set, the radar relies on keyword matching; posts phrased without any of your keywords are not captured.
 - LinkedIn limits connection notes to 200 characters; the app shows a live counter but the final paste is on you.
-- OpenRouter is selectable in Settings but not yet connected.
+- AI runs on the built-in NVIDIA key only: Settings exposes no provider, key, or model override, so an exhausted or revoked key can only be fixed by shipping a new build. `GeminiAiProvider` still exists but is never constructed, and the OpenRouter entry in the settings store is vestigial.
 - Shell navigation has no deep links/browser-history integration yet.
 - Only public professional information is eligible for future research; no fabricated contacts, bypassing access controls, or private-data collection.

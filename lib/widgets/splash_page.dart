@@ -56,8 +56,9 @@ class _SplashPageState extends State<SplashPage>
             animation: _controller,
             builder: (context, _) {
               final progress = _controller.value;
-              final textOpacity =
-                  ((progress - 0.35) / 0.3).clamp(0.0, 1.0).toDouble();
+              final textOpacity = ((progress - 0.35) / 0.3)
+                  .clamp(0.0, 1.0)
+                  .toDouble();
               final textSlide =
                   (1 - ((progress - 0.35) / 0.35).clamp(0.0, 1.0)) * 14;
               return Column(
@@ -150,14 +151,14 @@ class _SplashRadarPainter extends CustomPainter {
       Offset(center.dx - maxRadius * 0.82, center.dy),
       Offset(center.dx + maxRadius * 0.82, center.dy),
       Paint()
-      ..strokeWidth = 1
+        ..strokeWidth = 1
         ..color = color.withValues(alpha: 0.14),
     );
     canvas.drawLine(
       Offset(center.dx, center.dy - maxRadius * 0.82),
       Offset(center.dx, center.dy + maxRadius * 0.82),
       Paint()
-      ..strokeWidth = 1
+        ..strokeWidth = 1
         ..color = color.withValues(alpha: 0.14),
     );
 
@@ -183,10 +184,9 @@ class _SplashRadarPainter extends CustomPainter {
     // Bright leading edge.
     canvas.drawLine(
       center,
-      center +
-          Offset(math.cos(sweepAngle), math.sin(sweepAngle)) * sweepRadius,
+      center + Offset(math.cos(sweepAngle), math.sin(sweepAngle)) * sweepRadius,
       Paint()
-      ..strokeWidth = 2
+        ..strokeWidth = 2
         ..strokeCap = StrokeCap.round
         ..color = color.withValues(alpha: 0.9),
     );
@@ -200,11 +200,9 @@ class _SplashRadarPainter extends CustomPainter {
       var sincePass = normalizedSweep - blipTurns;
       if (sincePass < 0) sincePass += 1;
       final alpha = math.max(0.0, 1 - sincePass) * 0.95;
-      final blipCenter = center +
-          Offset(
-            math.sin(blip.angle),
-            -math.cos(blip.angle),
-          ) *
+      final blipCenter =
+          center +
+          Offset(math.sin(blip.angle), -math.cos(blip.angle)) *
               (maxRadius * blip.radius);
       // Expanding ping ring right after the pass.
       if (alpha > 0.15) {
@@ -212,13 +210,16 @@ class _SplashRadarPainter extends CustomPainter {
           blipCenter,
           3 + (1 - alpha) * 16,
           Paint()
-          ..style = PaintingStyle.stroke
+            ..style = PaintingStyle.stroke
             ..strokeWidth = 1.6
             ..color = color.withValues(alpha: alpha * 0.5),
         );
       }
-      canvas.drawCircle(blipCenter, 3.4, Paint()
-        ..color = color.withValues(alpha: 0.35 + alpha * 0.65));
+      canvas.drawCircle(
+        blipCenter,
+        3.4,
+        Paint()..color = color.withValues(alpha: 0.35 + alpha * 0.65),
+      );
     }
 
     // Center hub.
@@ -227,7 +228,7 @@ class _SplashRadarPainter extends CustomPainter {
       center,
       8 + progress * 4,
       Paint()
-      ..style = PaintingStyle.stroke
+        ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2
         ..color = color.withValues(alpha: (1 - progress) * 0.5),
     );

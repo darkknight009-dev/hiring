@@ -474,7 +474,10 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = widget.deps.settings;
     await settings.setPreferredRoles(_roles);
     await settings.setPreferredLocations(_locations);
-    await AndroidBridge.updateRadarKeywords(roles: _roles, locations: _locations);
+    await AndroidBridge.updateRadarKeywords(
+      roles: _roles,
+      locations: _locations,
+    );
   }
 
   /// Pauses or resumes capture. Pausing leaves the accessibility service

@@ -45,6 +45,19 @@ class RadarAccessibilityService : AccessibilityService() {
         var listener: ((Map<String, String?>) -> Unit)? = null
             private set
 
+        /// Set by MainActivity so every capture-state change — the in-app
+        /// control, the notification-shade action, or the system binding or
+        /// unbinding this service — reaches Flutter and all screens agree.
+        @Volatile
+        var stateListener: ((Map<String, Boolean>) -> Unit)? = null
+            private set
+
+        /// Persists the pause flag when the service itself is not running, so a
+        /// pause set from the app before accessibility was granted still
+        /// survives process death.
+        @Volatile
+        private var appContext: Context? = null
+
         @Volatile
         var isEnabled: Boolean = false
 
@@ -118,6 +131,25 @@ class RadarAccessibilityService : AccessibilityService() {
             return drained
         }
 
+        /// Registers the callback that mirrors capture state into Flutter. Pass
+        /// a null listener from MainActivity.onDestroy to detach.
+        fun attachState(
+            context: Context,
+            newStateListener: ((Map<String, Boolean>) -> Unit)?
+        ) {
+            appContext = context.applicationContext
+            stateListener = newStateListener
+        }
+
+        private fun emitState() {
+            val payload = mapOf("enabled" to isEnabled, "paused" to isPaused)
+            try {
+                stateListener?.invoke(payload)
+            } catch (_: Throwable) {
+                // A dying Flutter engine must never take the radar down with it.
+            }
+        }
+
         /// Called from the method channel with the Flutter-side counters
         /// (second filter, AI verdicts, saves) so the status notification
         /// reflects the whole pipeline in realtime.
@@ -137,12 +169,15 @@ class RadarAccessibilityService : AccessibilityService() {
 
         private fun setPaused(paused: Boolean) {
             isPaused = paused
-            val service = instance ?: return
-            service.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_PAUSED, paused)
-                .apply()
-            service.refreshStatus()
+            // Written through the app context when the service is not running,
+            // so the choice is not silently lost on the next process start.
+            val context = instance ?: appContext
+            context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                ?.edit()
+                ?.putBoolean(KEY_PAUSED, paused)
+                ?.apply()
+            instance?.refreshStatus()
+            emitState()
         }
     }
 
@@ -185,6 +220,7 @@ class RadarAccessibilityService : AccessibilityService() {
         isEnabled = true
         // "Capturing is ON" — posted the moment the service is enabled.
         refreshStatus()
+        emitState()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -598,6 +634,7 @@ class RadarAccessibilityService : AccessibilityService() {
         instance = null
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .cancel(STATUS_NOTIFICATION_ID)
+        emitState()
         return super.onUnbind(intent)
     }
 
@@ -606,6 +643,7 @@ class RadarAccessibilityService : AccessibilityService() {
         instance = null
         (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .cancel(STATUS_NOTIFICATION_ID)
+        emitState()
         super.onDestroy()
     }
 }

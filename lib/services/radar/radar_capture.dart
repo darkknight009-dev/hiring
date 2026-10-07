@@ -48,6 +48,11 @@ class RadarCapture {
       _queue.add(post);
       _drain();
     });
+    // Capture state can change without the app being involved at all — the
+    // notification shade, or the system unbinding the accessibility service.
+    // Relay it so every screen re-reads the native truth instead of keeping a
+    // stale ON/OFF chip on screen.
+    AndroidBridge.radarState.listen((_) => _deps.dataChanged());
     // Subscribe first, then pull: posts captured while no engine was
     // listening are flushed into the stream by this call.
     AndroidBridge.startRadarListener();

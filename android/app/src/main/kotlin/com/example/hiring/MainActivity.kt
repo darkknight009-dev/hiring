@@ -35,6 +35,19 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         shareChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        // Mirrors every capture-state change into Flutter — including ones made
+        // from the notification shade while the app is merely backgrounded — so
+        // the in-app screens and the shade control can never disagree.
+        RadarAccessibilityService.attachState(applicationContext) { state ->
+            runOnUiThread {
+                if (!::shareChannel.isInitialized) return@runOnUiThread
+                try {
+                    shareChannel.invokeMethod("onRadarStateChanged", state)
+                } catch (_: Throwable) {
+                    // Engine already gone; the next launch re-reads natively.
+                }
+            }
+        }
         shareChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getLaunchSharing" -> {
@@ -142,6 +155,7 @@ class MainActivity : FlutterActivity() {
         // Engine is going away: stop pushing into it; captures are buffered
         // in the service until the next startRadarListener call.
         RadarAccessibilityService.attach(null)
+        RadarAccessibilityService.attachState(applicationContext, null)
         super.onDestroy()
     }
 

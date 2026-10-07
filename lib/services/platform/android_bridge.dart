@@ -16,9 +16,15 @@ class AndroidBridge {
 
   static final _sharedPosts = StreamController<CapturedPost>.broadcast();
   static final _radarPosts = StreamController<RadarPost>.broadcast();
+  static final _radarState = StreamController<RadarState>.broadcast();
 
   static Stream<CapturedPost> get sharedPosts => _sharedPosts.stream;
   static Stream<RadarPost> get radarPosts => _radarPosts.stream;
+
+  /// Capture-state changes pushed by the native service. Emitted no matter
+  /// where the change came from — the in-app control, the notification-shade
+  /// action, or the system binding/unbinding the accessibility service.
+  static Stream<RadarState> get radarState => _radarState.stream;
 
   /// Registers the inbound handler once and returns the launch share, if any.
   static Future<CapturedPost?> listen() async {
@@ -34,6 +40,8 @@ class AndroidBridge {
           case 'onRadarPost':
             final post = RadarPost.fromExtras(args);
             if (post != null) _radarPosts.add(post);
+          case 'onRadarStateChanged':
+            _radarState.add(RadarState.fromExtras(args));
         }
       });
     }
@@ -133,6 +141,17 @@ class AndroidBridge {
     _radarPosts.add(post);
   }
 
+  /// Test-only: pushes a capture-state change into [radarState] as if the
+  /// native service had made it (e.g. from the notification shade). Never
+  /// called in production code.
+  @visibleForTesting
+  static void debugEmitRadarState({
+    required bool enabled,
+    required bool paused,
+  }) {
+    _radarState.add(RadarState(enabled: enabled, paused: paused));
+  }
+
   /// Pushes the Flutter-side pipeline counters (second filter, AI verdicts,
   /// saves) so the native status notification shows them in realtime.
   static Future<void> updateRadarStats(
@@ -212,4 +231,22 @@ class RadarPost {
       kind: readNonEmpty('kind') == 'profile' ? 'profile' : 'post',
     );
   }
+}
+
+/// The native radar's capture state at the moment it changed. Carried as a
+/// wake-up signal: pages re-read the authoritative values over the channel
+/// rather than trusting a copy that could already be stale.
+class RadarState {
+  const RadarState({required this.enabled, required this.paused});
+
+  /// The accessibility service is bound and allowed to read LinkedIn.
+  final bool enabled;
+
+  /// The user asked to stop capturing. Access is kept, so resuming is one tap.
+  final bool paused;
+
+  static RadarState fromExtras(Map<String, Object?>? extras) => RadarState(
+    enabled: extras?['enabled'] == true,
+    paused: extras?['paused'] == true,
+  );
 }

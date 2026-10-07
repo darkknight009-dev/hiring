@@ -15,10 +15,31 @@ class HiringRadarApp extends StatefulWidget {
   State<HiringRadarApp> createState() => _HiringRadarAppState();
 }
 
-class _HiringRadarAppState extends State<HiringRadarApp> {
+class _HiringRadarAppState extends State<HiringRadarApp>
+    with WidgetsBindingObserver {
   ThemeMode _themeMode = ThemeMode.system;
   late bool _onboarded = widget.deps.settings.onboarded;
   bool _splashDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Catch-up for changes native could not push while the engine was gone:
+    // capture toggled from the notification shade, or accessibility granted or
+    // revoked in system settings, with the app in the background.
+    if (state == AppLifecycleState.resumed) widget.deps.dataChanged();
+  }
 
   void _toggleTheme() {
     final dark =

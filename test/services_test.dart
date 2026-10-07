@@ -7,11 +7,67 @@ import 'package:hiring/models/outreach.dart';
 import 'package:hiring/services/analysis/ai_provider.dart';
 import 'package:hiring/services/analysis/hiring_filter.dart';
 import 'package:hiring/services/analysis/nvidia_ai_provider.dart';
+import 'package:hiring/app_dependencies.dart';
 import 'package:hiring/services/opportunities/opportunity_repository.dart';
+import 'package:hiring/services/outreach/outreach_service.dart';
 import 'package:hiring/services/settings/settings_store.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+const _profile = UserProfile(
+  name: 'Test',
+  headline: 'Flutter Developer',
+  skills: '',
+  tone: 'professional',
+);
+
+/// Answers 200 with [content] as the model's message. [finishReason] matters:
+/// it is what separates "the model wrote nothing" from "the model spent its
+/// whole budget reasoning and was cut off".
+MockClient _replyingWith(Object? content, {String? finishReason}) => MockClient(
+  (request) async => http.Response(
+    jsonEncode({
+      'choices': [
+        {
+          'finish_reason': ?finishReason,
+          'message': {'content': content},
+        },
+      ],
+    }),
+    200,
+  ),
+);
+
+/// Records what [OutreachService] forwards, so the prompt inputs are testable
+/// without a network.
+class _RecordingAi implements AiProvider {
+  String? posterName;
+
+  @override
+  Future<AnalysisResult> analyzePost({required String text, Uri? url}) async =>
+      const AnalysisResult(
+        analysis: PostAnalysis(isHiring: true, confidence: null),
+        modelUsed: 'fake',
+      );
+
+  @override
+  Future<OutreachDraft> generateDraft({
+    required String kind,
+    required String postText,
+    String? posterName,
+    String? role,
+    String? company,
+    required UserProfile profile,
+  }) async {
+    this.posterName = posterName;
+    return OutreachDraft(
+      kind: kind,
+      body: 'Draft body.',
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+  }
+}
 
 void main() {
   group('offline hiring filter', () {
@@ -429,6 +485,119 @@ void main() {
       );
       expect(draft.subject, 'Flutter role');
       expect(draft.body, 'Hello!');
+    });
+
+    test('drafts cap reasoning so the answer fits the token budget', () async {
+      Map<String, dynamic>? sent;
+      final client = MockClient((request) async {
+        sent = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'finish_reason': 'stop',
+                'message': {'content': '{"subject": null, "body": "Hello!"}'},
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      await NvidiaAiProvider(apiKey: 'k', client: client).generateDraft(
+        kind: 'email',
+        postText: 'We are hiring.',
+        profile: _profile,
+      );
+      // Nemotron-3 bills reasoning against max_tokens: at the default effort an
+      // email draft spent all 3000 tokens thinking and returned content: null.
+      expect(sent?['reasoning'], {'effort': 'low'});
+      // response_format quadruples the reasoning on this model — never send it.
+      expect(sent?.containsKey('response_format'), isFalse);
+    });
+
+    test(
+      'an exhausted budget reports the cause, not a bare "no answer"',
+      () async {
+        final provider = NvidiaAiProvider(
+          apiKey: 'k',
+          client: _replyingWith(null, finishReason: 'length'),
+        );
+        await expectLater(
+          provider.generateDraft(
+            kind: 'email',
+            postText: 'We are hiring.',
+            profile: _profile,
+          ),
+          throwsA(
+            isA<AiAnalysisException>().having(
+              (error) => error.message,
+              'message',
+              contains('ran out of room'),
+            ),
+          ),
+        );
+      },
+    );
+
+    test('a non-string body fails as a draft error, not a TypeError', () async {
+      final provider = NvidiaAiProvider(
+        apiKey: 'k',
+        client: _replyingWith('{"subject": 7, "body": ["not", "text"]}'),
+      );
+      await expectLater(
+        provider.generateDraft(
+          kind: 'connectionNote',
+          postText: 'We are hiring.',
+          profile: _profile,
+        ),
+        throwsA(isA<AiAnalysisException>()),
+      );
+    });
+
+    test('prose instead of JSON surfaces a parse error', () async {
+      final provider = NvidiaAiProvider(
+        apiKey: 'k',
+        client: _replyingWith('Sure! Here is a warm note for you.'),
+      );
+      await expectLater(
+        provider.generateDraft(
+          kind: 'connectionNote',
+          postText: 'We are hiring.',
+          profile: _profile,
+        ),
+        throwsA(isA<AiAnalysisException>()),
+      );
+    });
+  });
+
+  group('outreach drafts', () {
+    test('the captured poster name reaches the AI so it greets them', () async {
+      SharedPreferences.setMockInitialValues({
+        'profile.name': 'Ishaan',
+        'profile.headline': 'Flutter Developer',
+      });
+      final prefs = await SharedPreferences.getInstance();
+      final ai = _RecordingAi();
+      final deps = AppDependencies(prefs: prefs, aiOverride: ai);
+      final opportunity = Opportunity(
+        id: '1',
+        createdAt: DateTime.utc(2026, 1, 1),
+        updatedAt: DateTime.utc(2026, 1, 1),
+        status: 'new',
+        analysis: const PostAnalysis(
+          isHiring: true,
+          confidence: 90,
+          role: 'Flutter Developer',
+          company: 'Example Studio',
+        ),
+        text: 'We are hiring a Flutter Developer at Example Studio.',
+        posterName: 'Priya Sharma',
+      );
+
+      await OutreachService(deps)
+          .generate(opportunity: opportunity, kind: 'email');
+
+      expect(ai.posterName, 'Priya Sharma');
     });
   });
 }

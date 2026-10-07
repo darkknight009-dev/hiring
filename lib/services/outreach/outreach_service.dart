@@ -38,7 +38,7 @@ class OutreachService {
     final draft = await _deps.ai.generateDraft(
       kind: kind,
       postText: opportunity.text ?? opportunity.analysis.summary ?? '',
-      posterName: _guessPoster(opportunity),
+      posterName: opportunity.posterName,
       role: opportunity.analysis.role,
       company: opportunity.analysis.company,
       profile: _profile,
@@ -49,12 +49,6 @@ class OutreachService {
     await _deps.repository.save(updated);
     _deps.dataChanged();
     return draft;
-  }
-
-  String? _guessPoster(Opportunity opportunity) {
-    // The poster is unknown for radar/share captures unless the AI found a
-    // contact; drafts then fall back to a neutral greeting.
-    return null;
   }
 
   /// Marks the invitation as sent and starts interval reminders.

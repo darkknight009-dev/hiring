@@ -241,6 +241,17 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
       await widget.outreach.generate(opportunity: _opportunity, kind: kind);
     } on AiAnalysisException catch (error) {
       if (mounted) setState(() => _error = error.message);
+    } catch (error) {
+      // Anything unexpected (a malformed model reply, a failed save) must
+      // still surface: an escaping exception only clears the spinner and
+      // leaves the user staring at a button that appears to do nothing.
+      debugPrint('Draft generation failed: $error');
+      if (mounted) {
+        setState(
+          () => _error =
+              'Something went wrong while writing that draft. Try again.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _busyKind = null);
       widget.onChanged();

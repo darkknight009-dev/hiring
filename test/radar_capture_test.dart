@@ -209,52 +209,60 @@ void main() {
     expect(locations, contains('Berlin'));
     // The store strips blank entries on read, so a seeded '' can never make
     // `matchesJobPreferences` match everything via `contains('')`.
-    expect(
-      SettingsStore(prefs: freshPrefs).preferredRoles,
-      ['Flutter developer'],
-    );
+    expect(SettingsStore(prefs: freshPrefs).preferredRoles, [
+      'Flutter developer',
+    ]);
   });
 
-  test('captured post keeps the full text plus poster name and headline', () async {
-    RadarCapture(deps).start();
-    emit(
-      'We are hiring a React developer at Example Studio. DM me your resume.',
-      author: 'Jane Recruiter',
-      headline: 'Tech Recruiter at Example Studio · 2nd',
-    );
-    await settle();
+  test(
+    'captured post keeps the full text plus poster name and headline',
+    () async {
+      RadarCapture(deps).start();
+      emit(
+        'We are hiring a React developer at Example Studio. DM me your resume.',
+        author: 'Jane Recruiter',
+        headline: 'Tech Recruiter at Example Studio · 2nd',
+      );
+      await settle();
 
-    final all = await deps.repository.loadAll();
-    expect(all, hasLength(1));
-    expect(all.first.posterName, 'Jane Recruiter');
-    expect(all.first.posterHeadline, 'Tech Recruiter at Example Studio · 2nd');
-    expect(all.first.text, contains('We are hiring'));
-  });
+      final all = await deps.repository.loadAll();
+      expect(all, hasLength(1));
+      expect(all.first.posterName, 'Jane Recruiter');
+      expect(
+        all.first.posterHeadline,
+        'Tech Recruiter at Example Studio · 2nd',
+      );
+      expect(all.first.text, contains('We are hiring'));
+    },
+  );
 
-  test('poster profile captured later attaches to the saved opportunity', () async {
-    RadarCapture(deps).start();
-    emit(
-      'We are hiring a React developer at Example Studio. DM me your resume.',
-      author: 'Jane Recruiter',
-    );
-    await settle();
+  test(
+    'poster profile captured later attaches to the saved opportunity',
+    () async {
+      RadarCapture(deps).start();
+      emit(
+        'We are hiring a React developer at Example Studio. DM me your resume.',
+        author: 'Jane Recruiter',
+      );
+      await settle();
 
-    emit(
-      'Jane Recruiter\nTech Recruiter at Example Studio\nBerlin, Germany · Contact info\n'
-      '500+ connections\nAbout\nI hire frontend engineers across the EU.',
-      kind: 'profile',
-    );
-    await settle();
+      emit(
+        'Jane Recruiter\nTech Recruiter at Example Studio\nBerlin, Germany · Contact info\n'
+        '500+ connections\nAbout\nI hire frontend engineers across the EU.',
+        kind: 'profile',
+      );
+      await settle();
 
-    final all = await deps.repository.loadAll();
-    expect(
-      all,
-      hasLength(1),
-      reason: 'a profile screen is never a new opportunity',
-    );
-    expect(all.first.posterProfile, contains('500+ connections'));
-    expect(all.first.posterProfile, contains('I hire frontend engineers'));
-  });
+      final all = await deps.repository.loadAll();
+      expect(
+        all,
+        hasLength(1),
+        reason: 'a profile screen is never a new opportunity',
+      );
+      expect(all.first.posterProfile, contains('500+ connections'));
+      expect(all.first.posterProfile, contains('I hire frontend engineers'));
+    },
+  );
 
   test('profile of someone not in the inbox is dropped', () async {
     RadarCapture(deps).start();

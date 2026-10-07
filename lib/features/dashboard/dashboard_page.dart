@@ -462,9 +462,10 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
           const SizedBox(height: 8),
           Text(
             switch (enabled) {
-              true => _radarPaused
-                  ? 'Paused by you. Nothing is being read. Tap Resume to start capturing again — your permission is still granted.'
-                  : 'Listening to your feed. Hiring posts are captured locally while you scroll.',
+              true =>
+                _radarPaused
+                    ? 'Paused by you. Nothing is being read. Tap Resume to start capturing again — your permission is still granted.'
+                    : 'Listening to your feed. Hiring posts are captured locally while you scroll.',
               false => 'Off. Enable it once in Accessibility settings and it watches your feed while you scroll.',
               null => 'Checking radar status…',
             },
