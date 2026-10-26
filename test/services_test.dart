@@ -237,7 +237,7 @@ void main() {
     test('connection state transitions are tracked', () {
       final requested = base().copyWith(connectionState: 'requested');
       expect(requested.connectionState, 'requested');
-      expect(requested.dmUnlocked, isTrue);
+      expect(requested.dmUnlocked, isFalse);
       final accepted = requested.copyWith(connectionState: 'accepted');
       expect(accepted.connectionState, 'accepted');
       expect(base().dmUnlocked, isFalse);
@@ -276,9 +276,9 @@ void main() {
       return SettingsStore(prefs: prefs);
     }
 
-    test('defaults are Gemini, no key, threshold 4', () async {
+    test('defaults are NVIDIA, no key, threshold 4', () async {
       final settings = await store({});
-      expect(settings.provider, AiProviderKind.gemini);
+      expect(settings.provider, AiProviderKind.nvidia);
       expect(settings.apiKey, isNull);
       expect(settings.filterThreshold, 4);
       expect(settings.model, isEmpty);

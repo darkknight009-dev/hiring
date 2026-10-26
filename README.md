@@ -1,6 +1,6 @@
 # FeedRadar
 
-**Your feed has hiring posts. Your radar catches them.** A personal opportunity radar with a background scanner for Android: while you scroll LinkedIn, hiring posts matching *your* job preferences are detected locally, analyzed with your own AI key (Gemini or NVIDIA), and turned into ready-made outreach material — a connection note, a personalized DM, or an email draft. **You send everything yourself. The app never clicks, types, or sends anything.**
+**Your feed has hiring posts. Your radar catches them.** A personal opportunity radar with a background scanner for Android: while you scroll LinkedIn, hiring posts matching *your* job preferences are detected locally, analyzed with your own NVIDIA AI key, and turned into ready-made outreach material — a connection note, a personalized DM, or an email draft. **You send everything yourself. The app never clicks, types, or sends anything.**
 
 > **Current milestone: onboarding + preference-tuned radar (0.4).** First-launch onboarding (name, headline, job preferences) that syncs directly into the radar's capture filter, an animated radar loader and page transitions, NVIDIA NIM analysis, and everything from 0.3: Android background capture (read-only accessibility), connection tracking with interval reminders, AI-drafted outreach, resume attachment, and the local-only inbox. No backend, no automation of any LinkedIn action.
 
