@@ -78,6 +78,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final colors = theme.colorScheme;
     final settings = widget.deps.settings;
     final resumeStore = ResumeStore(settings);
+    final resumeSupported =
+        AndroidBridge.isAndroid && resumeStore.supportsPersistentStorage;
     return PageContent(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,7 +415,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 Text('Resume', style: theme.textTheme.titleLarge),
                 const SizedBox(height: 8),
                  Text(
-                   !resumeStore.supportsPersistentStorage
+                   !resumeSupported
                        ? 'Resume storage and email attachments are available on Android only.'
                        : _resumePath == null
                        ? 'Pick a PDF once. It stays in app-private storage and is attached when you open an email draft in your email app.'
@@ -428,7 +430,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   runSpacing: 12,
                   children: [
                      FilledButton.tonalIcon(
-                       onPressed: !resumeStore.supportsPersistentStorage
+                       onPressed: !resumeSupported
                            ? null
                            : () async {
                                try {
@@ -449,7 +451,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         _resumePath == null ? 'Pick resume PDF' : 'Replace',
                       ),
                     ),
-                     if (_resumePath != null && resumeStore.supportsPersistentStorage)
+                     if (_resumePath != null && resumeSupported)
                        OutlinedButton(
                         onPressed: () async {
                           final store = ResumeStore(settings);

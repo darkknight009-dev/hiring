@@ -327,6 +327,12 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _generateAsAlreadyConnected() async {
+    await widget.outreach.markAccepted(_opportunity);
+    await _reloadCurrent();
+    await _generate('dm');
+  }
+
   Future<void> _copy(String label, String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
@@ -520,10 +526,10 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
                             'Not connected — craft connection note',
                           ),
                         ),
-                        OutlinedButton.icon(
-                          onPressed: _busyKind == null
-                              ? () => _generate('dm')
-                              : null,
+                         OutlinedButton.icon(
+                           onPressed: _busyKind == null
+                               ? _generateAsAlreadyConnected
+                               : null,
                           icon: _busyKind == 'dm'
                               ? const _MiniSpinner()
                               : const Icon(Icons.chat_outlined, size: 18),
