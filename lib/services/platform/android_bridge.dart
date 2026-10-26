@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:flutter/services.dart';
 
 import '../../models/captured_post.dart';
@@ -25,6 +26,9 @@ class AndroidBridge {
   /// where the change came from — the in-app control, the notification-shade
   /// action, or the system binding/unbinding the accessibility service.
   static Stream<RadarState> get radarState => _radarState.stream;
+
+  static bool get isAndroid =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   /// Registers the inbound handler once and returns the launch share, if any.
   static Future<CapturedPost?> listen() async {

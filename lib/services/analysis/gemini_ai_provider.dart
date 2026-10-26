@@ -24,6 +24,11 @@ class GeminiAiProvider implements AiProvider {
   final String model;
   final http.Client _client;
 
+  static String untrusted(String text) {
+    final capped = text.length > 12000 ? '${text.substring(0, 12000)}…' : text;
+    return capped.replaceAll('"""', "'''");
+  }
+
   static const _analysisInstruction =
       'You extract structured facts from LinkedIn-style posts for a personal '
       'job-opportunity inbox. Reply with ONLY a JSON object, no markdown, no '
@@ -40,7 +45,7 @@ class GeminiAiProvider implements AiProvider {
   Future<AnalysisResult> analyzePost({required String text, Uri? url}) async {
     final prompt = [
       if (url != null) 'Post URL: $url',
-      if (text.isNotEmpty) 'Post text:\n$text',
+      if (text.isNotEmpty) 'Post text:\n${untrusted(text)}',
     ].join('\n\n');
     if (prompt.isEmpty) {
       throw const AiAnalysisException('Nothing to analyze: the post is empty.');
@@ -86,16 +91,19 @@ class GeminiAiProvider implements AiProvider {
     };
 
     final prompt = [
-      'Hiring post (verbatim):\n"""$postText"""',
+      'Hiring post (verbatim):\n"""${untrusted(postText)}"""',
       if (posterName != null && posterName.isNotEmpty)
-        'Poster name: $posterName',
-      if (role != null && role.isNotEmpty) 'Detected role: $role',
-      if (company != null && company.isNotEmpty) 'Detected company: $company',
+        'Poster name: ${untrusted(posterName)}',
+      if (role != null && role.isNotEmpty) 'Detected role: ${untrusted(role)}',
+      if (company != null && company.isNotEmpty)
+        'Detected company: ${untrusted(company)}',
       'Sender profile facts (never invent anything beyond these):',
-      'Name: ${profile.name.isEmpty ? "(unknown, use a neutral sign-off)" : profile.name}',
-      if (profile.headline.isNotEmpty) 'Headline: ${profile.headline}',
-      if (profile.skills.isNotEmpty) 'Skills and experience: ${profile.skills}',
-      'Tone: ${profile.tone}. No emojis. No placeholders like [Company] — use the '
+      'Name: ${profile.name.isEmpty ? "(unknown, use a neutral sign-off)" : untrusted(profile.name)}',
+      if (profile.headline.isNotEmpty)
+        'Headline: ${untrusted(profile.headline)}',
+      if (profile.skills.isNotEmpty)
+        'Skills and experience: ${untrusted(profile.skills)}',
+      'Tone: ${untrusted(profile.tone)}. No emojis. No placeholders like [Company] — use the '
           'real names from the post, or omit the sentence.',
       'Rules: $kindRules',
       'Reply with ONLY a JSON object: {"subject": string or null, "body": string}.',
@@ -108,13 +116,13 @@ class GeminiAiProvider implements AiProvider {
           'only on facts provided. Never fabricate experience, names, or companies.',
       maxOutputTokens: 700,
     );
-    final body = (parsed['body'] as String?)?.trim() ?? '';
+    final body = _readString(parsed['body']) ?? '';
     if (body.isEmpty) {
       throw const AiAnalysisException('AI returned an empty draft. Try again.');
     }
     return OutreachDraft(
       kind: kind,
-      subject: (parsed['subject'] as String?)?.trim(),
+      subject: _readString(parsed['subject']),
       body: body,
       createdAt: DateTime.now().toUtc(),
     );
@@ -198,9 +206,12 @@ class GeminiAiProvider implements AiProvider {
     if (candidates is! List || candidates.isEmpty) {
       throw const AiAnalysisException('AI returned no answer. Try again.');
     }
+    if (candidates.first is! Map) {
+      throw const AiAnalysisException('AI returned no answer. Try again.');
+    }
     final content = (candidates.first as Map)['content'];
     final parts = content is Map ? content['parts'] : null;
-    final textOut = parts is List && parts.isNotEmpty
+    final textOut = parts is List && parts.isNotEmpty && parts.first is Map
         ? (parts.first as Map)['text']
         : null;
     if (textOut is! String || textOut.isEmpty) {
@@ -216,6 +227,12 @@ class GeminiAiProvider implements AiProvider {
         'AI returned an answer that could not be parsed. Try again.',
       );
     }
+  }
+
+  static String? _readString(Object? value) {
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
   }
 
   void dispose() => _client.close();

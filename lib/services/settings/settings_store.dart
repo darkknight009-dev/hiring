@@ -27,8 +27,8 @@ class SettingsStore {
 
   AiProviderKind get provider => switch (prefs.getString(_keyProvider)) {
     'openRouter' => AiProviderKind.openRouter,
-    'nvidia' => AiProviderKind.nvidia,
-    _ => AiProviderKind.gemini,
+    'gemini' => AiProviderKind.gemini,
+    _ => AiProviderKind.nvidia,
   };
 
   Future<void> setProvider(AiProviderKind value) =>

@@ -158,7 +158,7 @@ class DashboardPage extends StatelessWidget {
             const SizedBox(height: 24),
             const Notice(
               icon: Icons.lock_outline_rounded,
-              text: 'Foundation preview · Your inbox is stored on this device only. Analysis uses your own AI key; nothing is sent on your behalf.',
+              text: 'Your inbox is stored on this device only. AI requests go directly from this device to NVIDIA; nothing is sent on your behalf.',
             ),
           ],
         ),
@@ -413,6 +413,26 @@ class _RadarStatusCardState extends State<_RadarStatusCard> {
     final colors = theme.colorScheme;
     final enabled = _radarEnabled;
     final capturing = enabled == true && !_radarPaused;
+    if (!AndroidBridge.isAndroid && enabled != true) {
+      return SurfaceCard(
+        key: const Key('radar-status-card'),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.radar_outlined, color: colors.onSurfaceVariant, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Background radar is available on Android. You can still capture posts manually here.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return SurfaceCard(
       key: const Key('radar-status-card'),
       child: Column(

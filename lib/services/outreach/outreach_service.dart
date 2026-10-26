@@ -35,14 +35,26 @@ class OutreachService {
         'Add your name and headline in Settings → Your profile so drafts are personal.',
       );
     }
+    if (!opportunity.isHiring) {
+      throw const AiAnalysisException(
+        'Outreach is available only for hiring opportunities.',
+      );
+    }
+    final postText = opportunity.text?.trim() ?? '';
+    if (postText.isEmpty) {
+      throw const AiAnalysisException(
+        'The original post text is missing, so a grounded draft cannot be written.',
+      );
+    }
     final draft = await _deps.ai.generateDraft(
       kind: kind,
-      postText: opportunity.text ?? opportunity.analysis.summary ?? '',
+      postText: postText,
       posterName: opportunity.posterName,
       role: opportunity.analysis.role,
       company: opportunity.analysis.company,
       profile: _profile,
     );
+    _validateDraft(draft);
     final updated = opportunity.copyWith(
       drafts: {...opportunity.drafts, kind: draft},
     );
@@ -67,6 +79,23 @@ class OutreachService {
     await AndroidBridge.cancelReminder(_reminderKey(updated));
   }
 
+  Future<void> cancelReminder(Opportunity opportunity) async {
+    if (kIsWeb) return;
+    await AndroidBridge.cancelReminder(_reminderKey(opportunity));
+  }
+
+  Future<void> syncReminders() async {
+    if (kIsWeb) return;
+    final all = await _deps.repository.loadAll();
+    for (final opportunity in all) {
+      if (opportunity.connectionState == 'requested') {
+        await _scheduleReminders(opportunity);
+      } else {
+        await cancelReminder(opportunity);
+      }
+    }
+  }
+
   Future<void> _scheduleReminders(Opportunity opportunity) async {
     if (kIsWeb) return;
     final hours = _deps.settings.reminderHours;
@@ -80,4 +109,24 @@ class OutreachService {
   }
 
   String _reminderKey(Opportunity opportunity) => 'followup-${opportunity.id}';
+
+  void _validateDraft(OutreachDraft draft) {
+    final limit = switch (draft.kind) {
+      'connectionNote' => 200,
+      'dm' => 500,
+      _ => null,
+    };
+    if (limit != null && draft.body.length > limit) {
+      throw AiAnalysisException(
+        'The AI draft exceeded the ${limit}-character limit. Try again.',
+      );
+    }
+    if (draft.kind == 'email' &&
+        draft.subject != null &&
+        draft.subject!.length > 70) {
+      throw const AiAnalysisException(
+        'The AI email subject exceeded the 70-character limit. Try again.',
+      );
+    }
+  }
 }

@@ -70,7 +70,7 @@ class Opportunity {
       OutreachScenario.detect(analysis.applyInstructions ?? text ?? '');
 
   bool get dmUnlocked =>
-      connectionState == 'accepted' || connectionState == 'requested';
+      connectionState == 'accepted';
 
   String get displayTitle {
     final role = analysis.role;

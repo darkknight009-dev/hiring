@@ -10,18 +10,15 @@ import 'ai_provider.dart';
 
 /// Talks to NVIDIA NIM (build.nvidia.com). The cloud endpoint is
 /// OpenAI-compatible: POST https://integrate.api.nvidia.com/v1/chat/completions
-/// with an `Authorization: Bearer <key>` header. The app ships with a built-in
-/// key ([embeddedApiKey]); users never enter one. Note: a key compiled into
-/// the app is extractable by anyone with the APK — rotate it if abused.
+/// with an `Authorization: Bearer <key>` header. The key is supplied by the
+/// user at runtime and is never committed to the application bundle.
 class NvidiaAiProvider implements AiProvider {
   NvidiaAiProvider({
-    this.apiKey = embeddedApiKey,
+    required this.apiKey,
     this.model = defaultModel,
     http.Client? client,
   }) : _client = client ?? http.Client();
 
-  static const embeddedApiKey =
-      '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';
   static const defaultModel = 'nvidia/nemotron-3-super-120b-a12b';
   static final endpoint = Uri.https(
     'integrate.api.nvidia.com',
@@ -115,14 +112,18 @@ class NvidiaAiProvider implements AiProvider {
     final prompt = [
       'Hiring post (verbatim):\n"""${untrusted(postText)}"""',
       if (posterName != null && posterName.isNotEmpty)
-        'Poster name: $posterName',
-      if (role != null && role.isNotEmpty) 'Detected role: $role',
-      if (company != null && company.isNotEmpty) 'Detected company: $company',
+        'Poster name: ${untrusted(posterName)}',
+      if (role != null && role.isNotEmpty)
+        'Detected role: ${untrusted(role)}',
+      if (company != null && company.isNotEmpty)
+        'Detected company: ${untrusted(company)}',
       'Sender profile facts (never invent anything beyond these):',
-      'Name: ${profile.name.isEmpty ? "(unknown, use a neutral sign-off)" : profile.name}',
-      if (profile.headline.isNotEmpty) 'Headline: ${profile.headline}',
-      if (profile.skills.isNotEmpty) 'Skills and experience: ${profile.skills}',
-      'Tone: ${profile.tone}. No emojis. No placeholders like [Company] — use the '
+      'Name: ${profile.name.isEmpty ? "(unknown, use a neutral sign-off)" : untrusted(profile.name)}',
+      if (profile.headline.isNotEmpty)
+        'Headline: ${untrusted(profile.headline)}',
+      if (profile.skills.isNotEmpty)
+        'Skills and experience: ${untrusted(profile.skills)}',
+      'Tone: ${untrusted(profile.tone)}. No emojis. No placeholders like [Company] — use the '
           'real names from the post, or omit the sentence.',
       'Rules: $kindRules',
       'Reply with ONLY a JSON object: {"subject": string or null, "body": string}.',
@@ -165,6 +166,12 @@ class NvidiaAiProvider implements AiProvider {
     required String system,
     required int maxTokens,
   }) async {
+    if (apiKey.trim().isEmpty) {
+      throw const AiAnalysisException(
+        'Add your NVIDIA API key in Settings before using AI analysis.',
+      );
+    }
+
     final http.Response response;
     try {
       response = await _client
@@ -209,14 +216,13 @@ class NvidiaAiProvider implements AiProvider {
 
     if (response.statusCode == 401 || response.statusCode == 403) {
       throw const AiAnalysisException(
-        'NVIDIA rejected the request. The built-in AI key may be invalid or '
-        'out of quota.',
+        'NVIDIA rejected the request. Check your API key or quota in Settings.',
       );
     }
     if (response.statusCode == 404 || response.statusCode == 410) {
       throw AiAnalysisException(
-        'The built-in AI model "$model" is no longer available on NVIDIA. '
-        'Update the app to a newer version to restore AI analysis.',
+        'The NVIDIA model "$model" is no longer available. Update the model in '
+        'your local settings or choose a supported model.',
       );
     }
     if (response.statusCode == 429) {
@@ -240,9 +246,9 @@ class NvidiaAiProvider implements AiProvider {
     }
 
     final choices = body['choices'];
-    final choice = choices is List && choices.isNotEmpty
-        ? choices.first as Map
-        : null;
+      final choice = choices is List && choices.isNotEmpty && choices.first is Map
+          ? choices.first as Map
+          : null;
     final message = choice?['message'];
     final content = message is Map ? message['content'] : null;
     if (content is! String || content.trim().isEmpty) {

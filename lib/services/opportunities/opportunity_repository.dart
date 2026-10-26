@@ -23,13 +23,22 @@ class OpportunityRepository {
       final raw = prefs.getString(_storageKey);
       if (raw != null && raw.isNotEmpty) {
         try {
-          final decoded = jsonDecode(raw) as List;
-          _cache = decoded
-              .map(
-                (e) => Opportunity.fromJson((e as Map).cast<String, dynamic>()),
-              )
-              .toList();
-        } on FormatException {
+          final decoded = jsonDecode(raw);
+          if (decoded is! List) throw const FormatException('Expected a list.');
+          final restored = <Opportunity>[];
+          for (final entry in decoded) {
+            try {
+              if (entry is! Map) continue;
+              restored.add(
+                Opportunity.fromJson(entry.cast<String, dynamic>()),
+              );
+            } on Object {
+              // Skip one malformed record instead of making the whole inbox
+              // unavailable. The remaining valid records are still useful.
+            }
+          }
+          _cache = restored;
+        } on Object {
           _cache = const [];
         }
       }

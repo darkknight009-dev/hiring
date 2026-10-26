@@ -72,14 +72,11 @@ class _AnalyzePageState extends State<AnalyzePage> {
   /// share arriving while the app is open never re-runs initState — the deps
   /// listener routes it here instead.
   void _consumePending() {
+    if (_stage != _Stage.idle) return;
     final pending = widget.deps.takePendingCapture();
     if (pending == null) return;
     _text.text = pending.text ?? '';
     _url.text = pending.url?.toString() ?? '';
-    if (_stage != _Stage.idle) {
-      // Never interleave analyses; the user can re-run from the filled form.
-      return;
-    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _capture();
     });
@@ -124,6 +121,7 @@ class _AnalyzePageState extends State<AnalyzePage> {
       });
       FocusManager.instance.primaryFocus?.unfocus();
       await _runAnalysis(captured);
+      if (mounted) _consumePending();
     } on FormatException catch (error) {
       if (mounted) {
         setState(() {
@@ -246,7 +244,7 @@ class _AnalyzePageState extends State<AnalyzePage> {
             ),
             const SizedBox(height: 28),
             const Notice(
-              text: 'Captured posts stay on this device. AI analysis uses your own provider key and receives only the post you paste.',
+              text: 'Captured posts stay on this device. AI analysis uses the NVIDIA key you save in Settings and receives only the content needed for analysis.',
             ),
             const SizedBox(height: 20),
             SurfaceCard(

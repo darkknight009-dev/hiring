@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app_dependencies.dart';
+import '../../services/outreach/outreach_service.dart';
 import '../../services/platform/android_bridge.dart';
 import '../../services/resume/resume_store.dart';
 import '../../widgets/keyword_field.dart';
@@ -22,6 +23,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _nameController = TextEditingController();
   final _headlineController = TextEditingController();
   final _skillsController = TextEditingController();
+  final _apiKeyController = TextEditingController();
   late List<String> _roles = [...widget.deps.settings.preferredRoles];
   late List<String> _locations = [...widget.deps.settings.preferredLocations];
   bool _radarEnabled = false;
@@ -36,6 +38,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _nameController.text = settings.profileName;
     _headlineController.text = settings.profileHeadline;
     _skillsController.text = settings.profileSkills;
+    _apiKeyController.text = settings.apiKey ?? '';
     _resumePath = settings.resumePath;
     widget.deps.addListener(_onDepsChanged);
     _refreshRadarStatus();
@@ -65,6 +68,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _nameController.dispose();
     _headlineController.dispose();
     _skillsController.dispose();
+    _apiKeyController.dispose();
     super.dispose();
   }
 
@@ -73,6 +77,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final settings = widget.deps.settings;
+    final resumeStore = ResumeStore(settings);
     return PageContent(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,20 +87,20 @@ class _SettingsPageState extends State<SettingsPage> {
           Text('Settings', style: theme.textTheme.headlineLarge),
           const SizedBox(height: 12),
           Text(
-            'Your data stays on this device. AI analysis is built in — no keys, no setup.',
+             'Your data stays on this device. Add your NVIDIA key to enable AI analysis.',
             style: theme.textTheme.bodyLarge?.copyWith(
               color: colors.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 28),
-          SurfaceCard(
-            child: Column(
+           SurfaceCard(
+             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('AI analysis', style: theme.textTheme.titleLarge),
                 const SizedBox(height: 8),
-                Text(
-                  'Post analysis and outreach drafts are built in and run on NVIDIA NIM models. There is nothing to configure and no API key to manage.',
+                 Text(
+                   'Post analysis and outreach drafts run directly from this device to NVIDIA NIM. Your key is stored only in local app settings.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
@@ -103,11 +108,30 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 12),
                 const Notice(
                   icon: Icons.shield_outlined,
-                  text: 'Requests go directly from this device to NVIDIA. Your opportunities, profile, and resume never leave the device otherwise.',
-                ),
-              ],
-            ),
-          ),
+                   text: 'Only the content needed for the current analysis or draft is sent to NVIDIA. The app has no backend.',
+                 ),
+                 const SizedBox(height: 16),
+                 TextFormField(
+                   key: const Key('nvidia-api-key'),
+                   controller: _apiKeyController,
+                   obscureText: true,
+                   autocorrect: false,
+                   enableSuggestions: false,
+                   decoration: const InputDecoration(
+                     labelText: 'NVIDIA API key',
+                     hintText: 'nvapi-…',
+                     prefixIcon: Icon(Icons.key_outlined),
+                   ),
+                 ),
+                 const SizedBox(height: 12),
+                 FilledButton.tonalIcon(
+                   onPressed: _saveApiKey,
+                   icon: const Icon(Icons.save_outlined, size: 18),
+                   label: const Text('Save AI key'),
+                 ),
+               ],
+             ),
+           ),
           const SizedBox(height: 20),
           SurfaceCard(
             child: Column(
@@ -226,9 +250,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  !_radarEnabled
-                      ? 'The radar reads visible LinkedIn posts while you scroll and captures hiring posts locally. Enable it in Accessibility settings.'
+                 Text(
+                   !AndroidBridge.isAndroid
+                       ? 'The background radar is available on Android only.'
+                       : !_radarEnabled
+                       ? 'The radar reads visible LinkedIn posts while you scroll and captures hiring posts locally. Enable it in Accessibility settings.'
                       : _radarPaused
                       ? 'Paused. Stopping never revokes accessibility access, so resuming is one tap — no system settings, no new permission.'
                       : 'The radar is on. While you scroll LinkedIn, hiring posts are captured locally.',
@@ -236,52 +262,59 @@ class _SettingsPageState extends State<SettingsPage> {
                     color: colors.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 12),
-                const Notice(
-                  icon: Icons.visibility_outlined,
-                  text: 'Read-only: the radar never clicks, types, or sends. It only observes the LinkedIn app. You can disable it any time.',
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed: () async {
-                        await AndroidBridge.requestNotificationPermission();
-                        await AndroidBridge.openAccessibilitySettings();
-                      },
-                      icon: const Icon(
-                        Icons.accessibility_new_rounded,
-                        size: 18,
-                      ),
-                      label: const Text('Accessibility settings'),
-                    ),
-                    OutlinedButton(
-                      onPressed: () =>
-                          AndroidBridge.requestNotificationPermission(),
-                      child: const Text('Allow notifications'),
-                    ),
-                    if (_radarEnabled && _radarPaused)
-                      FilledButton.tonalIcon(
-                        key: const Key('resume-radar-button'),
-                        onPressed: _radarBusy ? null : () => _setPaused(false),
-                        icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                        label: const Text('Resume capture'),
-                      )
-                    else if (_radarEnabled)
-                      OutlinedButton.icon(
-                        key: const Key('stop-radar-button'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: colors.error,
-                          side: BorderSide(color: colors.error),
-                        ),
-                        onPressed: _radarBusy ? null : () => _setPaused(true),
-                        icon: const Icon(Icons.stop_circle_outlined, size: 18),
-                        label: const Text('Stop capture'),
-                      ),
-                  ],
-                ),
+                 const SizedBox(height: 12),
+                 if (!AndroidBridge.isAndroid)
+                   const Notice(
+                     icon: Icons.info_outline_rounded,
+                     text: 'The background radar is available on Android only.',
+                   )
+                 else ...[
+                   const Notice(
+                     icon: Icons.visibility_outlined,
+                     text: 'Read-only: the radar never clicks, types, or sends. It only observes the LinkedIn app. You can disable it any time.',
+                   ),
+                   const SizedBox(height: 12),
+                   Wrap(
+                     spacing: 12,
+                     runSpacing: 12,
+                     children: [
+                       FilledButton.tonalIcon(
+                         onPressed: () async {
+                           await AndroidBridge.requestNotificationPermission();
+                           await AndroidBridge.openAccessibilitySettings();
+                         },
+                         icon: const Icon(
+                           Icons.accessibility_new_rounded,
+                           size: 18,
+                         ),
+                         label: const Text('Accessibility settings'),
+                       ),
+                       OutlinedButton(
+                         onPressed: () =>
+                             AndroidBridge.requestNotificationPermission(),
+                         child: const Text('Allow notifications'),
+                       ),
+                       if (_radarEnabled && _radarPaused)
+                         FilledButton.tonalIcon(
+                           key: const Key('resume-radar-button'),
+                           onPressed: _radarBusy ? null : () => _setPaused(false),
+                           icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                           label: const Text('Resume capture'),
+                         )
+                       else if (_radarEnabled)
+                         OutlinedButton.icon(
+                           key: const Key('stop-radar-button'),
+                           style: OutlinedButton.styleFrom(
+                             foregroundColor: colors.error,
+                             side: BorderSide(color: colors.error),
+                           ),
+                           onPressed: _radarBusy ? null : () => _setPaused(true),
+                           icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                           label: const Text('Stop capture'),
+                         ),
+                     ],
+                   ),
+                 ],
                 const SizedBox(height: 16),
                 Text('Reminder interval', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 8),
@@ -295,6 +328,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   selected: {settings.reminderHours},
                   onSelectionChanged: (selection) async {
                     await settings.setReminderHours(selection.first);
+                    await OutreachService(widget.deps).syncReminders();
                     setState(() {});
                   },
                 ),
@@ -378,10 +412,12 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 Text('Resume', style: theme.textTheme.titleLarge),
                 const SizedBox(height: 8),
-                Text(
-                  _resumePath == null
-                      ? 'Pick a PDF once. It stays in app-private storage and is attached when you open an email draft in your email app.'
-                      : 'Stored on this device: resume.pdf. It will be attached when you open an email draft.',
+                 Text(
+                   !resumeStore.supportsPersistentStorage
+                       ? 'Resume storage and email attachments are available on Android only.'
+                       : _resumePath == null
+                       ? 'Pick a PDF once. It stays in app-private storage and is attached when you open an email draft in your email app.'
+                       : 'Stored on this device: resume.pdf. It will be attached when you open an email draft.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colors.onSurfaceVariant,
                   ),
@@ -391,20 +427,30 @@ class _SettingsPageState extends State<SettingsPage> {
                   spacing: 12,
                   runSpacing: 12,
                   children: [
-                    FilledButton.tonalIcon(
-                      onPressed: () async {
-                        final store = ResumeStore(settings);
-                        final path = await store.pickAndStore();
-                        if (!mounted) return;
-                        setState(() => _resumePath = path ?? _resumePath);
-                      },
+                     FilledButton.tonalIcon(
+                       onPressed: !resumeStore.supportsPersistentStorage
+                           ? null
+                           : () async {
+                               try {
+                                 final path = await resumeStore.pickAndStore();
+                                 if (!mounted) return;
+                                 setState(() => _resumePath = path ?? _resumePath);
+                               } catch (_) {
+                                 if (!mounted) return;
+                                 ScaffoldMessenger.of(context).showSnackBar(
+                                   const SnackBar(
+                                     content: Text('Could not store that resume PDF.'),
+                                   ),
+                                 );
+                               }
+                             },
                       icon: const Icon(Icons.upload_file_rounded, size: 18),
                       label: Text(
                         _resumePath == null ? 'Pick resume PDF' : 'Replace',
                       ),
                     ),
-                    if (_resumePath != null)
-                      OutlinedButton(
+                     if (_resumePath != null && resumeStore.supportsPersistentStorage)
+                       OutlinedButton(
                         onPressed: () async {
                           final store = ResumeStore(settings);
                           await store.clear();
@@ -513,6 +559,15 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Profile saved. Drafts will use it.')),
+    );
+  }
+
+  Future<void> _saveApiKey() async {
+    await widget.deps.settings.setApiKey(_apiKeyController.text);
+    widget.deps.resetAiProvider();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('AI key saved on this device.')),
     );
   }
 }

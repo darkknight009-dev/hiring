@@ -1,7 +1,6 @@
 package com.example.hiring
 
 import android.Manifest
-import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -9,10 +8,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.provider.Settings
 import android.text.TextUtils
 import androidx.core.app.NotificationCompat
@@ -266,39 +263,23 @@ class MainActivity : FlutterActivity() {
 
     // ---- reminders ----------------------------------------------------------
 
-    private fun reminderPendingIntent(key: String, title: String, body: String): PendingIntent {
-        val intent = Intent(this, ReminderReceiver::class.java).apply {
-            action = ReminderReceiver.ACTION_SHOW_REMINDER
-            putExtra(ReminderReceiver.EXTRA_KEY, key.hashCode())
-            putExtra(ReminderReceiver.EXTRA_TITLE, title)
-            putExtra(ReminderReceiver.EXTRA_BODY, body)
-        }
-        return PendingIntent.getBroadcast(
-            this,
-            key.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-    }
-
     private fun scheduleReminder(key: String, title: String, body: String, intervalMillis: Long) {
-        val manager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pending = reminderPendingIntent(key, title, body)
-        val firstAt = SystemClock.elapsedRealtime() + intervalMillis
-        manager.setInexactRepeating(AlarmManager.ELAPSED_REALTIME, firstAt, intervalMillis, pending)
+        ReminderReceiver.schedule(this, key, title, body, intervalMillis)
     }
 
     private fun cancelReminder(key: String) {
-        val manager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        manager.cancel(reminderPendingIntent(key, "", ""))
+        ReminderReceiver.cancel(this, key)
     }
 
     // ---- email handoff ------------------------------------------------------
 
     private fun openEmail(to: String, subject: String, body: String, attachmentPath: String?) {
-        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${Uri.encode(to)}"))
-        intent.putExtra(Intent.EXTRA_SUBJECT, subject)
-        intent.putExtra(Intent.EXTRA_TEXT, body)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = if (!attachmentPath.isNullOrEmpty()) "application/pdf" else "text/plain"
+            putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+            putExtra(Intent.EXTRA_TEXT, body)
+        }
         if (!attachmentPath.isNullOrEmpty()) {
             val file = File(attachmentPath)
             if (file.exists()) {

@@ -163,7 +163,6 @@ class RadarCapture {
       posterHeadline: post.headline,
     );
     await _deps.repository.save(opportunity);
-    await _deps.setPendingCapture(null);
     _saved++;
     _publishStats();
 

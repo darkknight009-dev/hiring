@@ -23,8 +23,7 @@ class UserProfile {
   final String skills;
   final String tone;
 
-  bool get hasContent =>
-      name.isNotEmpty || headline.isNotEmpty || skills.isNotEmpty;
+  bool get hasContent => name.isNotEmpty && headline.isNotEmpty;
 }
 
 /// The analysis pipeline consumes this contract, not a specific vendor SDK.

@@ -18,31 +18,50 @@ class AppDependencies extends ChangeNotifier {
   final SettingsStore settings;
   final OpportunityRepository repository;
 
-  CapturedPost? _pendingCapture;
+  final _pendingCaptures = <CapturedPost>[];
   final AiProvider? aiOverride;
   AiProvider? _ai;
 
   /// A shared-in post waiting to be analyzed. The shell navigates to the
   /// capture screen when this is set.
-  bool get hasPendingCapture => _pendingCapture != null;
+  bool get hasPendingCapture => _pendingCaptures.isNotEmpty;
 
-  /// The built-in AI provider (NVIDIA NIM with an embedded key). Users never
-  /// configure a key; tests inject [aiOverride] to stay off the network.
-  AiProvider get ai => _ai ??= aiOverride ?? NvidiaAiProvider();
+  CapturedPost? get pendingCapture =>
+      _pendingCaptures.isEmpty ? null : _pendingCaptures.first;
+
+  /// NVIDIA NIM is configured with the user's local-only key. Tests inject
+  /// [aiOverride] to stay off the network.
+  AiProvider get ai => _ai ??= aiOverride ?? NvidiaAiProvider(
+    apiKey: settings.apiKey ?? '',
+    model: settings.model.isEmpty
+        ? NvidiaAiProvider.defaultModel
+        : settings.model,
+  );
+
+  /// Rebuilds the provider after runtime AI settings change.
+  void resetAiProvider() {
+    if (aiOverride != null) return;
+    _ai = null;
+    notifyListeners();
+  }
 
   /// Public signal for services (radar, outreach) that mutate data outside
   /// the widget tree and need the UI to refresh.
   void dataChanged() => notifyListeners();
 
   Future<void> setPendingCapture(CapturedPost? post) async {
-    _pendingCapture = post;
+    if (post == null) {
+      _pendingCaptures.clear();
+    } else {
+      _pendingCaptures.add(post);
+    }
     notifyListeners();
   }
 
   /// Consumes the pending share so it is analyzed exactly once.
   CapturedPost? takePendingCapture() {
-    final value = _pendingCapture;
-    _pendingCapture = null;
+    if (_pendingCaptures.isEmpty) return null;
+    final value = _pendingCaptures.removeAt(0);
     return value;
   }
 }

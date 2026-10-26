@@ -27,6 +27,31 @@ class _OpportunitiesPageState extends State<OpportunitiesPage> {
   String? _statusFilter;
 
   @override
+  void initState() {
+    super.initState();
+    widget.deps.addListener(_onDataChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant OpportunitiesPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.deps != widget.deps) {
+      oldWidget.deps.removeListener(_onDataChanged);
+      widget.deps.addListener(_onDataChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.deps.removeListener(_onDataChanged);
+    super.dispose();
+  }
+
+  void _onDataChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -229,8 +254,29 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
   String? _busyKind;
   String? _error;
   bool _showProfile = false;
+  late Opportunity _current;
 
-  Opportunity get _opportunity => widget.opportunity;
+  Opportunity get _opportunity => _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.opportunity;
+  }
+
+  Future<void> _reloadCurrent() async {
+    final all = await widget.deps.repository.loadAll();
+    Opportunity? refreshed;
+    for (final item in all) {
+      if (item.id == _current.id) {
+        refreshed = item;
+        break;
+      }
+    }
+    if (refreshed != null && mounted) {
+      setState(() => _current = refreshed);
+    }
+  }
 
   Future<void> _generate(String kind) async {
     setState(() {
@@ -239,6 +285,7 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
     });
     try {
       await widget.outreach.generate(opportunity: _opportunity, kind: kind);
+      await _reloadCurrent();
     } on AiAnalysisException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (error) {
@@ -275,8 +322,9 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
 
   Future<void> _markAccepted() async {
     await widget.outreach.markAccepted(_opportunity);
+    await _reloadCurrent();
     widget.onChanged();
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) setState(() {});
   }
 
   Future<void> _copy(String label, String text) async {
@@ -292,7 +340,9 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final analysis = _opportunity.analysis;
-    final scenario = _opportunity.scenario;
+    final scenario = _opportunity.isHiring
+        ? _opportunity.scenario
+        : const OutreachScenario(wantsDm: false, wantsEmail: false);
     final note = _opportunity.drafts['connectionNote'];
     final dm = _opportunity.drafts['dm'];
     final email = _opportunity.drafts['email'];
@@ -411,13 +461,19 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
               ],
             ),
             const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            Text(
-              'Outreach — prepared for you, sent by you',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
+             const Divider(),
+             const SizedBox(height: 8),
+             Text(
+               'Outreach — prepared for you, sent by you',
+               style: theme.textTheme.titleMedium,
+             ),
+             if (!_opportunity.isHiring) ...[
+               const SizedBox(height: 8),
+               const Notice(
+                 text: 'This capture was not confirmed as a hiring opportunity, so outreach is unavailable.',
+               ),
+             ],
+             const SizedBox(height: 4),
             const Notice(
               icon: Icons.shield_outlined,
               text: 'Nothing is ever sent automatically. You copy the material or open your own apps and press send.',
@@ -502,9 +558,9 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
                     ],
                   ],
                 ),
-                'requested' => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                 'requested' => Column(
+                   crossAxisAlignment: CrossAxisAlignment.start,
+                   children: [
                     Notice(
                       icon: Icons.hourglass_top_rounded,
                       text:
@@ -513,33 +569,11 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
                           'and copy your personalized message.',
                     ),
                     const SizedBox(height: 12),
-                    if (dm != null)
-                      _DraftCard(
-                        title: 'Personalized message (ready to copy)',
-                        body: dm.body,
-                        maxHint: 500,
-                        onCopy: () => _copy('Message', dm.body),
-                        onRegenerate: _busyKind == null
-                            ? () => _generate('dm')
-                            : null,
-                      )
-                    else
-                      FilledButton.icon(
-                        onPressed: _busyKind == null
-                            ? () => _generate('dm')
-                            : null,
-                        icon: _busyKind == 'dm'
-                            ? const _MiniSpinner()
-                            : const Icon(Icons.chat_outlined, size: 18),
-                        label: const Text('They accepted — write my message'),
-                      ),
-                    if (dm != null) ...[
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        onPressed: _busyKind == null ? _markAccepted : null,
-                        child: const Text('They accepted — stop reminders'),
-                      ),
-                    ],
+                     FilledButton.icon(
+                       onPressed: _busyKind == null ? _markAccepted : null,
+                       icon: const Icon(Icons.check_circle_outline, size: 18),
+                       label: const Text('They accepted — unlock my message'),
+                     ),
                   ],
                 ),
                 'accepted' =>
@@ -593,13 +627,15 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
                   onRegenerate: _busyKind == null
                       ? () => _generate('email')
                       : null,
-                  trailing: FilledButton.tonalIcon(
-                    onPressed: _busyKind == null
-                        ? () => _openEmailApp(email)
-                        : null,
-                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                    label: const Text('Open in email app'),
-                  ),
+                   trailing: AndroidBridge.isAndroid
+                       ? FilledButton.tonalIcon(
+                           onPressed: _busyKind == null
+                               ? () => _openEmailApp(email)
+                               : null,
+                           icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                           label: const Text('Open in email app'),
+                         )
+                       : null,
                 ),
                 if (widget.outreach.resume.storedPath == null) ...[
                   const SizedBox(height: 8),
@@ -621,7 +657,10 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
                   if (status != _opportunity.status)
                     OutlinedButton(
                       onPressed: () async {
-                        await widget.deps.repository.save(
+                         if (_opportunity.connectionState == 'requested') {
+                           await widget.outreach.cancelReminder(_opportunity);
+                         }
+                         await widget.deps.repository.save(
                           _opportunity.copyWith(status: status),
                         );
                         widget.onChanged();
@@ -635,6 +674,7 @@ class _OpportunityDetailState extends State<_OpportunityDetail> {
             TextButton.icon(
               onPressed: () async {
                 await widget.deps.repository.delete(_opportunity.id);
+                await widget.outreach.cancelReminder(_opportunity);
                 if (context.mounted) Navigator.of(context).pop();
                 widget.onChanged();
               },

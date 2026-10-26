@@ -306,9 +306,9 @@ class _WelcomeStep extends StatelessWidget {
               _Bullet(
                 icon: Icons.auto_awesome_outlined,
                 title: 'Built-in AI',
-                body:
-                    'Posts are analyzed and outreach drafts are written by '
-                    'built-in NVIDIA AI. No keys to create, no setup — it just works.',
+                 body:
+                     'Posts are analyzed and outreach drafts are written by '
+                     'NVIDIA AI. Add your NVIDIA key in Settings when you are ready.',
               ),
               const SizedBox(height: 16),
               _Bullet(

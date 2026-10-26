@@ -2,7 +2,7 @@
 
 **Your feed has hiring posts. Your radar catches them.** A personal opportunity radar with a background scanner for Android: while you scroll LinkedIn, hiring posts matching *your* job preferences are detected locally, analyzed with your own AI key (Gemini or NVIDIA), and turned into ready-made outreach material — a connection note, a personalized DM, or an email draft. **You send everything yourself. The app never clicks, types, or sends anything.**
 
-> **Current milestone: onboarding + preference-tuned radar (0.4).** First-launch onboarding (name, headline, job preferences) that syncs directly into the radar's capture filter, an animated radar loader and page transitions, NVIDIA NIM as a second AI provider, and everything from 0.3: Android background capture (read-only accessibility), connection tracking with interval reminders, AI-drafted outreach, resume attachment, and the local-only inbox. No backend, no automation of any LinkedIn action.
+> **Current milestone: onboarding + preference-tuned radar (0.4).** First-launch onboarding (name, headline, job preferences) that syncs directly into the radar's capture filter, an animated radar loader and page transitions, NVIDIA NIM analysis, and everything from 0.3: Android background capture (read-only accessibility), connection tracking with interval reminders, AI-drafted outreach, resume attachment, and the local-only inbox. No backend, no automation of any LinkedIn action.
 
 > ⚠️ **Honest risk note:** observing another app's content via an Accessibility Service is automation-adjacent and outside LinkedIn's terms of service. The radar is strictly read-only, keeps all data on-device, and never interacts with LinkedIn — but using it is your decision and account restriction is a possible consequence. Enable it in Accessibility settings; disable it any time.
 
@@ -12,7 +12,7 @@
 - Responsive overview with a desktop sidebar and compact mobile bottom navigation, light/dark themes, **animated page transitions**, and an **animated radar loader** during AI work.
 - Manual capture (URL/text/share target) with validation, plus **background radar capture** on Android.
 - **Offline hiring filter**: cheap rule-based detection gates AI calls so obvious non-posts never cost quota.
-- **AI analysis** (Google Gemini **or NVIDIA NIM**, free tiers): structured extraction of role, company, location, apply instructions, summary, and a hiring verdict with confidence — nullable fields, never invented values.
+- **AI analysis** (NVIDIA NIM, user-supplied key): structured extraction of role, company, location, apply instructions, summary, and a hiring verdict with confidence — nullable fields, never invented values.
 - **Saved opportunities** with statuses (New, Need action, Applied, Follow-up, Archived), search, and filtering — all stored **locally on your device**.
 - **Ready-made outreach, sent by you:**
   - *DM posts* → the app asks whether you are connected. Not connected: it crafts a ≤200-char connection note, then (after you mark "I sent the request") repeats reminders until you mark "they accepted", which unlocks the personalized DM draft. Already connected: straight to the DM draft.
@@ -31,7 +31,7 @@
 | --- | --- | --- |
 | Shared UI and app logic | Flutter / Dart | Implemented |
 | Persistence | `shared_preferences` (local-only JSON) | Implemented |
-| AI | `AiProvider` abstraction; Gemini + NVIDIA NIM implementations | Implemented; key user-supplied |
+| AI | `AiProvider` abstraction; NVIDIA NIM implementation | Implemented; key user-supplied |
 | Hiring filter | Offline rule-based scoring | Implemented |
 | Background capture | Android Accessibility Service (read-only) | Implemented; sideload APK |
 | Outreach | Draft generation + copy/email handoff | Implemented; sends are manual |
@@ -120,13 +120,14 @@ Open `http://127.0.0.1:8080` in Brave. Press `q` in the Flutter terminal to stop
 
 ### AI analysis (built in)
 
-AI is built in — no API key to create or paste. Post analysis and outreach drafts run on NVIDIA NIM models (`nvidia/nemotron-3-super-120b-a12b` by default) with a key embedded in the app.
+Post analysis and outreach drafts run directly from the device to NVIDIA NIM models (`nvidia/nemotron-3-super-120b-a12b` by default). Add your NVIDIA API key in **Settings → AI analysis**; it is stored locally.
 
-1. Fill **Your profile** (name, headline, skills, tone) — drafts use only these facts.
-2. Optionally pick your **resume PDF** for email attachments.
-3. Set **Job preferences** — the radar then captures only posts mentioning your roles (and locations, if set).
+1. Add your NVIDIA API key in **Settings → AI analysis**.
+2. Fill **Your profile** (name, headline, skills, tone) — drafts use only these facts.
+3. Optionally pick your **resume PDF** for Android email attachments.
+4. Set **Job preferences** — the radar then captures only posts mentioning your roles (and locations, if set).
 
-Note: an embedded key is extractable by anyone who has the APK; rotate it at build.nvidia.com if it is ever abused. Posts that the offline filter scores below the threshold skip AI entirely.
+Note: the key is sent directly to NVIDIA from the device and is stored in local preferences. Posts that the offline filter scores below the threshold skip AI entirely.
 
 ### Enable the background radar (Android)
 
@@ -138,7 +139,7 @@ Note: an embedded key is extractable by anyone who has the APK; rotate it at bui
 ### Try the analyzed inbox
 
 1. Select **Analyze post** and paste a hiring post, e.g. `We're hiring a React developer at Example Studio. DM me your resume.`
-2. Select **Analyze post**. With a key configured you get a verdict and extracted fields; without one, the capture is saved without analysis.
+2. Select **Analyze post**. With a key configured you get a verdict and extracted fields; without one, the app explains how to configure AI and keeps your input intact.
 3. Select **Save to my inbox**, then check **Overview** counts and the **Opportunities** list.
 4. Change a status from the detail sheet, search, and delete.
 5. Share text into the app from another app (Android) to land on the capture screen.
@@ -183,6 +184,6 @@ The accessibility service, notifications, and alarms are exercised on-device onl
 - The offline filter is intentionally conservative; some hiring posts may skip AI (lower the threshold in Settings). Job preferences are strict by design: a post must mention your roles (and locations, if set) or it is skipped.
 - With job preferences set, the radar relies on keyword matching; posts phrased without any of your keywords are not captured.
 - LinkedIn limits connection notes to 200 characters; the app shows a live counter but the final paste is on you.
-- AI runs on the built-in NVIDIA key only: Settings exposes no provider, key, or model override, so an exhausted or revoked key can only be fixed by shipping a new build. `GeminiAiProvider` still exists but is never constructed, and the OpenRouter entry in the settings store is vestigial.
+- AI runs on the user-configured NVIDIA key. `GeminiAiProvider` remains as an unused provider implementation for future use, while the OpenRouter entry in the settings store is legacy state.
 - Shell navigation has no deep links/browser-history integration yet.
 - Only public professional information is eligible for future research; no fabricated contacts, bypassing access controls, or private-data collection.
